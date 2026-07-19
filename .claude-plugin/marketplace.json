@@ -1,0 +1,14 @@
+{
+  "name": "claude-intent-router",
+  "description": "UserPromptSubmit hook for intent detection and skill routing.",
+  "owner": {
+    "name": "asaphe"
+  },
+  "plugins": [
+    {
+      "name": "intent-router",
+      "source": "./",
+      "description": "UserPromptSubmit hook that detects high-confidence short-phrase intents (status checks, merge confirmations, PR review/finalize requests, planning triggers, pause) and injects skill-routing or rigor-checklist context. Configurable via ~/.claude/intent-router.config.json for project-specific skill names and vocabulary; works with generic fallback text out of the box."
+    }
+  ]
+}
