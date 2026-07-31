@@ -67,8 +67,8 @@ TICKET_SYSTEM=$(slot ticket_system "your ticket system")
 TICKET_ID_PATTERN=$(slot ticket_id_pattern "your ticket-ID pattern")
 TRACKER_PATH=$(slot tracker_path "your task-scratch file, if one exists")
 BOT_PATTERN=$(slot watch_bot_pattern "bot")
-# Whitelisted to safe alternation chars only — a "valid but unbalanced" value could otherwise close this group early and swallow the rest of Intent 8's pattern.
-case "$BOT_PATTERN" in *[!A-Za-z0-9_\|-]*) BOT_PATTERN="bot" ;; esac
+# Same two hazards xp() guards: a disallowed char could close Intent 8's group early, and a boundary '|' yields an empty branch that matches every prompt on GNU grep and errors on BSD.
+case "$BOT_PATTERN" in *[!A-Za-z0-9_\|-]*|'|'*|*'|'|*'||'*) BOT_PATTERN="bot" ;; esac
 
 # A declined watch/plan/bundle request ("don't plan this yet") shouldn't fire the affirmative intent for it.
 NEGATION_MATCH=0

@@ -278,6 +278,15 @@ for bad in '["finalz",""]' '["finalz|"]' '["|finalz"]' '["finalz||wrap"]' '[" "]
   assert_match    "finalize the pr" "Skill(skill='pr-finalize')"
 done
 
+# watch_bot_pattern feeds Intent 8's alternation the same way extra_patterns feeds 5/14 — it needs the same boundary-pipe guard.
+for bad in 'bugbot|' '|bugbot' 'bugbot||x' ; do
+  jq -n --arg b "$bad" '{watch_bot_pattern:$b}' > "$CFG_C"
+  assert_match    "wait for ci" "PROACTIVE-REPORT"
+  assert_no_match "deploy the staging cluster"
+done
+jq -n '{watch_bot_pattern:"bugbot"}' > "$CFG_C"
+assert_match "wait for bugbot" "PROACTIVE-REPORT"
+
 # Fragments are matched against a lowercased prompt, so they must be case-folded rather than silently dead.
 jq -n '{pr_finalize_skill:"pr-finalize", extra_patterns:{finalize:["FINALZ"]}}' > "$CFG_C"
 assert_match "run finalz" "Skill(skill='pr-finalize')"
