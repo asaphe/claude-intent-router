@@ -46,8 +46,8 @@ real one).
 | `pr_finalize_skill` | Name of your pre-merge-check skill, if you have one |
 | `pr_resolver_skill` | Name of your PR-comment-resolution skill, if you have one |
 | `planning_skill` | Name of your planning/RFC skill, if you have one |
-| `reviewer_roster` | Comma-separated list of your reviewer agents, if any |
-| `env_axis_label` | Your environment/blast-radius classification axis, e.g. staging/prod or tenant tier |
+| `reviewer_roster` | Comma-separated list of your reviewer agents, if any. Fallback text only — ignored when `pr_review_skill` is set |
+| `env_axis_label` | Your environment/blast-radius classification axis, e.g. staging/prod or tenant tier. Fallback text only — ignored when `planning_skill` is set |
 | `rigor_doc_path` | Path or name of a rigor/review-discipline doc to cite, if you have one |
 | `skeptic_rule_sources` | Array of paths to rigor/engineering-standards docs for the bundled skeptic agent to read |
 | `code_review_skill` | Name of your code-review skill/process, for the skeptic agent's fallback routing |
