@@ -307,6 +307,59 @@ assert_no_match "lets finalize the release notes"
 
 rm -rf "$TMPHOME_C"
 
+# ---------- Phase D: configured-branch text — Phase B leaves pr_check/pr_review unset and planning null, so those branches never run there ----------
+TMPHOME_D=$(mktemp -d)
+mkdir -p "$TMPHOME_D/.claude"
+jq -n '{
+  pr_check_skill: "pr-check",
+  pr_review_skill: "pr-review",
+  pr_finalize_skill: "pr-finalize",
+  pr_resolver_skill: "pr-resolver",
+  planning_skill: "planning"
+}' > "$TMPHOME_D/.claude/intent-router.config.json"
+export HOME="$TMPHOME_D"
+
+echo "=== Phase D: configured-branch text integrity ==="
+
+assert_match "check comments" "Skill(skill='pr-check')"
+assert_match "review the pr" "Skill(skill='pr-review')"
+assert_match "lets plan this" "Skill(skill='planning')"
+
+# A rewrite that drops either half of mandate-plus-escape-hatch is otherwise a silent regression.
+for p in "check comments" "review the pr" "ship it" "resolve comments on pr" "lets plan this"; do
+  assert_match "$p" "REQUIRED: your next tool call MUST be Skill("
+  assert_match "$p" "Exception:"
+done
+
+# The routing intents must keep telling the model to forward the PR number.
+for p in "check comments" "review the pr" "ship it" "resolve comments on pr"; do
+  assert_match "$p" "as args if"
+done
+
+# Ordering and the never-merge prohibition must outlive any rewrite of the surrounding prose.
+assert_match "resolve comments on pr" "resolve first and finalize after"
+assert_match "resolve comments on pr" "never call the merge command yourself"
+assert_match "ship it" "never call the merge command yourself"
+
+rm -rf "$TMPHOME_D"
+
+# ---------- Phase E: fallback-only slots — an unset var expands to empty, so a dropped assignment yields "()" unnoticed ----------
+TMPHOME_E=$(mktemp -d)
+mkdir -p "$TMPHOME_E/.claude"
+export HOME="$TMPHOME_E"
+
+echo "=== Phase E: fallback-slot interpolation ==="
+
+assert_match "review the pr" "passes (one per axis) covering"
+assert_match "lets plan this" "your environment/blast-radius classification axis"
+
+jq -n '{reviewer_roster: "sec-reviewer, perf-reviewer", env_axis_label: "prod/staging"}' \
+  > "$TMPHOME_E/.claude/intent-router.config.json"
+assert_match "review the pr" "passes (sec-reviewer, perf-reviewer) covering"
+assert_match "lets plan this" "Resource | prod/staging | Verified-where"
+
+rm -rf "$TMPHOME_E"
+
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
 [ "$FAIL" -eq 0 ]
