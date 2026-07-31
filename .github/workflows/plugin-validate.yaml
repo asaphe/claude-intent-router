@@ -1,0 +1,65 @@
+name: Plugin Validate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '22'
+
+      - name: Install claude CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Validate marketplace manifest
+        run: claude plugin validate .
+
+      - name: Validate plugin manifest
+        run: claude plugin validate .
+
+      - name: Shell syntax check
+        run: |
+          set -euo pipefail
+          find hooks -name '*.sh' -print0 | xargs -0 -n1 bash -n
+
+      - name: Shellcheck
+        run: |
+          set -euo pipefail
+          find hooks tests -name '*.sh' -print0 | xargs -0 -n1 shellcheck -x
+
+      - name: JSON syntax check
+        run: |
+          set -euo pipefail
+          find . -name '*.json' -not -path './node_modules/*' -print0 \
+            | xargs -0 -n1 python3 -c 'import json,sys; json.load(open(sys.argv[1]))'
+
+      # The hook eval()s config-derived text and builds regexes from it — the suite is the only thing that catches a bad splice.
+      - name: Run test suite
+        run: bash tests/test-intents.sh
+
+      # GNU grep and BSD grep disagree on an empty alternation branch: one matches everything, the other errors. Both are failure modes.
+      - name: Run test suite under BusyBox grep
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq busybox
+          mkdir -p /tmp/bbin && ln -sf "$(command -v busybox)" /tmp/bbin/grep
+          PATH="/tmp/bbin:$PATH" bash tests/test-intents.sh

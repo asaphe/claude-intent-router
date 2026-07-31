@@ -106,6 +106,61 @@ assert_match    "ship it!" "FINALIZE"
 assert_match    "merge it" "FINALIZE"
 assert_match    "merge please" "FINALIZE"
 assert_no_match "finalize the naming convention"
+# Trailing-clause forms — the shape the anchored pattern used to miss entirely.
+assert_match    "run finalize" "FINALIZE"
+assert_match    "finalize the pr" "FINALIZE"
+assert_match    "finalize prs" "FINALIZE"
+assert_match    "fix and address everything then finalize" "FINALIZE"
+assert_match    "when done finalize" "FINALIZE"
+assert_match    "check prs for issues/comments and finalize" "FINALIZE"
+assert_match    "1184 needs pr-finalize" "FINALIZE"
+assert_match    "did you run pr-finalize on each?" "FINALIZE"
+assert_match    "wait for ci to complete on all three and run pr-finalize" "FINALIZE"
+assert_match    "make sure to finalize the pr and close any gaps" "FINALIZE"
+assert_no_match "we create a finalized rfc that others can review"
+assert_no_match "finalize the wording of the error message"
+
+# Intent 14 — PR comment resolution
+assert_match    "pr-resolver" "PR COMMENT RESOLUTION"
+assert_match    "run pr-resolver and then finalize" "PR COMMENT RESOLUTION"
+assert_match    "run resolver then run finalize" "PR COMMENT RESOLUTION"
+assert_match    "resolve comments and finalize" "PR COMMENT RESOLUTION"
+assert_match    "resolve issues with pr" "PR COMMENT RESOLUTION"
+assert_match    "1202 has comments. resolve and finalize" "PR COMMENT RESOLUTION"
+assert_match    "address/resolve comments on pr and finalize" "PR COMMENT RESOLUTION"
+assert_match    "re-check both prs and resolve all comments if any" "PR COMMENT RESOLUTION"
+assert_match    "there is an unresolved comment on the pr" "PR COMMENT RESOLUTION"
+# "unresolved follow-ups" is a session-summary idiom, not a request to touch review threads.
+assert_no_match "prepare follow-up prompt for unresolved"
+assert_no_match "can we resolve the footgun?"
+assert_no_match "i would like to resolve it"
+# Object tokens need word boundaries: "nit" must not match inside "unit"/"init".
+assert_no_match "resolve the unit test failures"
+assert_no_match "resolve the init script"
+# A bare number is not a PR reference.
+assert_no_match "resolve the 502 errors"
+assert_no_match "can you resolve the 4096 byte limit"
+assert_no_match "the finalists were announced"
+
+# Intent 3 yields to Intent 14 — "resolve comments" satisfies both, and two hard Skill() mandates would conflict.
+raw=$(run_hook "resolve comments")
+out=$(printf '%s' "$raw" | jq -r '.hookSpecificOutput.additionalContext')
+if printf '%s' "$out" | grep -qF "PR COMMENT RESOLUTION" && ! printf '%s' "$out" | grep -qF "COMMENT/THREAD SWEEP"; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); printf 'FAIL: "resolve comments" must route to resolver only, got: %.120s\n' "$out"
+fi
+# Resolver is emitted before finalize so a combined ask reads in workflow order.
+raw=$(run_hook "resolve comments and finalize")
+out=$(printf '%s' "$raw" | jq -r '.hookSpecificOutput.additionalContext')
+# Prefix-trim rather than grep -b: BusyBox grep has no byte-offset flag.
+before_res="${out%%PR COMMENT RESOLUTION*}"
+before_fin="${out%%FINALIZE PRE-MERGE GATE*}"
+if [ "${#before_res}" -lt "${#before_fin}" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); printf 'FAIL: resolver must be injected before finalize\n'
+fi
 
 # Intent 6 — session queue / next item
 assert_match    "anything else" "SESSION QUEUE"
@@ -177,8 +232,10 @@ mkdir -p "$TMPHOME_B/.claude"
 jq -n '{
   ticket_system: "ClickUp",
   pr_finalize_skill: "pr-finalize",
+  pr_resolver_skill: "pr-resolver",
   planning_skill: null,
-  watch_bot_pattern: "x)|(.*"
+  watch_bot_pattern: "x)|(.*",
+  extra_patterns: { finalize: ["finalz"], resolver: ["x)|(.*"] }
 }' > "$TMPHOME_B/.claude/intent-router.config.json"
 export HOME="$TMPHOME_B"
 
@@ -186,6 +243,13 @@ echo "=== Phase B: config present (hard mandates, null handling, adversarial val
 
 assert_match    "ship it" "Skill(skill='pr-finalize')"
 assert_match    "merged" "ClickUp"
+assert_match    "resolve comments on pr" "Skill(skill='pr-resolver')"
+# extra_patterns is additive: a configured typo form routes exactly like the bundled spelling.
+assert_match    "run finalzie" "Skill(skill='pr-finalize')"
+assert_match    "finalzie the prs" "Skill(skill='pr-finalize')"
+# An unbalanced fragment is dropped, not spliced in — the bundled resolver pattern must still work and must not start matching everything.
+assert_match    "resolve the comments" "Skill(skill='pr-resolver')"
+assert_no_match "deploy the staging cluster"
 raw=$(run_hook "plan this")
 out=$(printf '%s' "$raw" | jq -r '.hookSpecificOutput.additionalContext')
 if printf '%s' "$out" | grep -qF "Skill(skill="; then
@@ -197,6 +261,42 @@ fi
 assert_no_match "totally unrelated short prompt"
 
 rm -rf "$TMPHOME_B"
+
+# ---------- Phase C: extra_patterns fragments that pass a character whitelist but are semantically hazardous ----------
+TMPHOME_C=$(mktemp -d)
+mkdir -p "$TMPHOME_C/.claude"
+export HOME="$TMPHOME_C"
+CFG_C="$TMPHOME_C/.claude/intent-router.config.json"
+
+echo "=== Phase C: hazardous-but-whitelisted extra_patterns ==="
+
+# An empty alternation branch matches every prompt on GNU grep and is a hard regex error on BSD/ugrep. Both outcomes are wrong; neither may reach the matcher.
+for bad in '["finalz",""]' '["finalz|"]' '["|finalz"]' '["finalz||wrap"]' '[" "]' '["  ","finalz"]'; do
+  jq -n --argjson f "$bad" '{pr_finalize_skill:"pr-finalize", extra_patterns:{finalize:$f}}' > "$CFG_C"
+  assert_no_match "deploy the staging cluster"
+  assert_no_match "hello"
+  assert_match    "finalize the pr" "Skill(skill='pr-finalize')"
+done
+
+# Fragments are matched against a lowercased prompt, so they must be case-folded rather than silently dead.
+jq -n '{pr_finalize_skill:"pr-finalize", extra_patterns:{finalize:["FINALZ"]}}' > "$CFG_C"
+assert_match "run finalz" "Skill(skill='pr-finalize')"
+assert_match "run FINALZ" "Skill(skill='pr-finalize')"
+
+# A malformed extra_patterns must not take the rest of the config down with it.
+jq -n '{pr_finalize_skill:"pr-finalize", extra_patterns:"oops-a-string"}' > "$CFG_C"
+assert_match "finalize the pr" "Skill(skill='pr-finalize')"
+jq -n '{pr_finalize_skill:"pr-finalize", extra_patterns:{finalize:"not-an-array"}}' > "$CFG_C"
+assert_match "finalize the pr" "Skill(skill='pr-finalize')"
+
+# The negative guard must survive words between the verb and the excluded noun.
+rm -f "$CFG_C"
+assert_no_match "finalize the api design doc"
+assert_no_match "i finalized the tenant naming scheme"
+assert_no_match "we finalized the migration plan last week"
+assert_no_match "lets finalize the release notes"
+
+rm -rf "$TMPHOME_C"
 
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="

@@ -6,10 +6,15 @@
   "pr_check_skill": "",
   "pr_review_skill": "",
   "pr_finalize_skill": "",
+  "pr_resolver_skill": "",
   "planning_skill": "",
   "reviewer_roster": "",
   "env_axis_label": "",
   "rigor_doc_path": "",
   "skeptic_rule_sources": [],
-  "code_review_skill": ""
+  "code_review_skill": "",
+  "extra_patterns": {
+    "finalize": [],
+    "resolver": []
+  }
 }

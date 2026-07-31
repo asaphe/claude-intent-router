@@ -6,7 +6,8 @@ PROMPT=$(printf '%s\n' "$INPUT" | jq -r '.prompt // empty')
 
 # Skip long/slash-command prompts — this hook is precision-first, short-phrase only.
 [ -z "$PROMPT" ] && exit 0
-[ "${#PROMPT}" -gt 200 ] && exit 0
+# 400, not 200: real workflow asks trail a clause onto other instructions ("wait for CI, resolve comments, finalize").
+[ "${#PROMPT}" -gt 400 ] && exit 0
 case "$PROMPT" in /*) exit 0 ;; esac
 
 NORM=$(printf '%s' "$PROMPT" | tr '[:upper:]' '[:lower:]' | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//')
@@ -17,10 +18,16 @@ CONFIG_FILE="${HOME}/.claude/intent-router.config.json"
 if [ -f "$CONFIG_FILE" ]; then
   # Keys are whitelisted before eval — an unsanitized key could inject a command even with @sh-quoted values.
   eval "$(jq -r '
-    to_entries
-    | map(select(.key | test("^[A-Za-z0-9_]+$")))
-    | map(select(.value != null and .value != false))
-    | map("CFG_" + (.key | ascii_upcase) + "=" + ((.value | if type == "array" then join(", ") else tostring end) | @sh))
+    (to_entries
+     | map(select(.key | test("^[A-Za-z0-9_]+$")))
+     | map(select(.value != null and .value != false))
+     | map(select(.key != "extra_patterns"))
+     | map("CFG_" + (.key | ascii_upcase) + "=" + ((.value | if type == "array" then join(", ") else tostring end) | @sh)))
+    + (try ((.extra_patterns // {})
+     | to_entries
+     | map(select(.key | test("^[A-Za-z0-9_]+$")))
+     | map(select(.value | type == "array"))
+     | map("CFG_XP_" + (.key | ascii_upcase) + "=" + ((.value | map(tostring) | map(ascii_downcase) | map(select(test("^[a-z0-9_ -]+$") and test("[a-z0-9]"))) | join("|")) | @sh))) catch [])
     | .[]
   ' "$CONFIG_FILE" 2>/dev/null)"
 fi
@@ -39,6 +46,21 @@ has_slot() {
   upper=$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')
   var="CFG_${upper}"
   [ -n "${!var:-}" ]
+}
+
+# xp <intent> — additive user trigger fragments as a leading-'|' alternation tail; see: ../README.md § extra_patterns
+xp() {
+  local upper var val
+  upper=$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')
+  var="CFG_XP_${upper}"
+  val="${!var:-}"
+  [ -z "$val" ] && return 0
+  case "$val" in *[!A-Za-z0-9_\ \|-]*) return 0 ;; esac
+  # An empty alternation branch matches every prompt on GNU grep and is a hard regex error on BSD/ugrep — reject rather than splice.
+  case "$val" in '|'*|*'|'|*'||'*) return 0 ;; esac
+  # A branch of only spaces matches almost everything; jq drops these, this is the belt-and-braces half.
+  case "$val" in *[!\ \|]*) ;; *) return 0 ;; esac
+  printf '|%s' "$val"
 }
 
 TICKET_SYSTEM=$(slot ticket_system "your ticket system")
@@ -74,8 +96,29 @@ if printf '%s\n' "$NORM" | grep -qE '^(status\??|any (status(es)?|updates?)\??|u
 "
 fi
 
-# Intent 3: comment sweep — raw API calls skip codified per-comment discipline.
-if printf '%s\n' "$NORM" | grep -qE '^((any |new )?comments?\??|check (for |the )?comments?( on (the )?prs?)?|(review|address|resolve) (comments?|threads?|feedback)( on (the )?prs?)?|what(.?s| is) on the pr|pr feedback)[.?!]?$'; then
+# Intent 14 is detected here, ahead of Intent 3, because "resolve comments" satisfies both and the two emit conflicting Skill() mandates.
+RESOLVER_MATCH=0
+if printf '%s\n' "$NORM" | grep -qE "(^|[^a-z])/?pr[ /-]?resolv(e|er|ed)?([^a-z]|\$)|(^|[^a-z])(run|use) (the )?resolver"; then
+  RESOLVER_MATCH=1
+else
+  # "unresolved follow-ups" is the dominant false positive, so the state form only counts alongside a review-thread object.
+  RES_STRIPPED=$(printf '%s' "$NORM" | sed -E 's/un-?res(olv|ovl)[a-z]*/UNRES/g')
+  # "issue" is deliberately not an object on its own — "resolve the issue" is generic English; it only counts via the PR marker below.
+  RES_OBJ='(comment|ocmment|commnet|thread|feedback|finding|suggestion|(^|[^a-z])nit([^a-z]|$)|bugbot|bot review|pullrequestreview)'
+  # 3-digit floor on #N: "[image #2]" is an attachment ref, not a PR reference. A bare number is NOT a marker — "resolve the 502 errors" is not a PR.
+  RES_PR='(^|[^a-z])prs?([^a-z]|$)|#[0-9]{3,}|/pull/'
+  if printf '%s\n' "$RES_STRIPPED" | grep -qE "(^|[^a-z])(resolv|resovl|resolev$(xp resolver))e?[a-z]*" \
+     && printf '%s\n' "$NORM" | grep -qE "$RES_OBJ|$RES_PR" \
+     && ! { printf '%s\n' "$NORM" | grep -qE 'follow.?up' && ! printf '%s\n' "$NORM" | grep -qE "$RES_OBJ"; }; then
+    RESOLVER_MATCH=1
+  elif printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])un-?res(olv|ovl)[a-z]*' \
+     && printf '%s\n' "$NORM" | grep -qE "$RES_OBJ"; then
+    RESOLVER_MATCH=1
+  fi
+fi
+
+# Intent 3: comment sweep — raw API calls skip codified per-comment discipline. Yields to Intent 14: fixing the finding supersedes triaging it.
+if [ "$RESOLVER_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE '^((any |new )?comments?\??|check (for |the )?comments?( on (the )?prs?)?|(review|address|resolve) (comments?|threads?|feedback)( on (the )?prs?)?|what(.?s| is) on the pr|pr feedback)[.?!]?$'; then
   if has_slot pr_check_skill; then
     PR_CHECK_SKILL=$(slot pr_check_skill "")
     CTX="${CTX}INTENT — COMMENT/THREAD SWEEP (skill routing). REQUIRED: your next tool call MUST be Skill(skill='${PR_CHECK_SKILL}'), passing the PR number as args if the user named one. The skill encapsulates the codified comment-query discipline: per-comment multi-field projection, individual comment classification (never bulk-label-stale), reply-then-resolve via GraphQL resolveReviewThread, bot-review minimize-not-blank. Doing this manually via raw API calls is a skill-routing violation. Exception: if the user's ask is materially narrower than the skill scope (e.g., 'how many comments?'), surface the mismatch and act on the answer.
@@ -99,8 +142,27 @@ if printf '%s\n' "$NORM" | grep -qE '^(review (the |this )?pr|run (the )?review|
   fi
 fi
 
+if [ "$RESOLVER_MATCH" -eq 1 ]; then
+  if has_slot pr_resolver_skill; then
+    PR_RESOLVER_SKILL=$(slot pr_resolver_skill "")
+    CTX="${CTX}INTENT — PR COMMENT RESOLUTION (skill routing). REQUIRED: your next tool call MUST be Skill(skill='${PR_RESOLVER_SKILL}'), passing the PR number as args if the user named one. The skill fixes the findings in code, commits, re-reviews, and resolves each thread — a raw reply-and-resolve leaves the underlying finding unfixed. If a finalize intent also fired this turn, resolve first and finalize after; never merge either way. Exception: if the ask is materially narrower (e.g., 'how many are unresolved?'), surface the mismatch and act on the answer.
+"
+  else
+    CTX="${CTX}INTENT — PR COMMENT RESOLUTION. Route to your PR-comment-resolution skill if you have one configured. If not, apply this discipline inline: fix each finding in code rather than replying that it is acknowledged, commit the fixes, re-review the changed lines, then reply and resolve each thread individually via a proper resolve mutation. If a finalize intent also fired this turn, resolve first and finalize after; never merge either way. Exception: if the ask is materially narrower (e.g., 'how many are unresolved?'), surface the mismatch and act on the answer.
+"
+  fi
+fi
+
 # Intent 5: finalize / merge-intent phrasing — catches "ship it" before a raw merge attempt.
-if printf '%s\n' "$NORM" | grep -qE '^(finalize|is (the )?pr ready|ready to merge|merge ready|wrap up (the )?pr|pre-merge|all (set|done|good) for merge|merge it|merge th(is|ese)( one| pr)?|(please )?go ahead and merge|(lets|let.?s) merge( it| this)?|ship it|ok(ay)? merge( it)?|merge please|merge (it |this )?now)[.?!]?$'; then
+FINALIZE_MATCH=0
+# Merge phrasings stay whole-prompt anchored: "merge it" as a substring fires on "dont merge it yet".
+printf '%s\n' "$NORM" | grep -qE '^(is (the )?pr ready|ready to merge|merge ready|wrap up (the )?pr|pre-merge|all (set|done|good) for merge|merge it|merge th(is|ese)( one| pr)?|(please )?go ahead and merge|(lets|let.?s) merge( it| this)?|ship it|ok(ay)? merge( it)?|merge please|merge (it |this )?now)[.?!]?$' && FINALIZE_MATCH=1
+# The finalize verb is matched as a substring: it is nearly always a trailing clause ("fix everything then finalize"), never the whole prompt.
+if printf '%s\n' "$NORM" | grep -qE "(^|[^a-z])(pr[ -]?)?(finaliz|finalis$(xp finalize))[a-z]*" \
+   && ! printf '%s\n' "$NORM" | grep -qE '(finalist|(finaliz|finalis)[a-z]*( [a-z]+){0,3} (naming|convention|approach|design|wording|schema|spec|rfc|doc|docs|document|version|draft|plan|copy|list|format|structure|architecture|decision|name|policy|template|title|message|notes|scheme))'; then
+  FINALIZE_MATCH=1
+fi
+if [ "$FINALIZE_MATCH" -eq 1 ]; then
   if has_slot pr_finalize_skill; then
     PR_FINALIZE_SKILL=$(slot pr_finalize_skill "")
     CTX="${CTX}INTENT — FINALIZE PRE-MERGE GATE (skill routing). REQUIRED: your next tool call MUST be Skill(skill='${PR_FINALIZE_SKILL}'), passing PR number(s) as args if named. The skill runs the full pre-merge gate (CI status, thread sweep, body-vs-diff, commit history, ticket status, assignee, comment-style scan, privacy/personal-path scan) and explicitly never merges. Doing this manually misses one or more gates. Exception: if the ask is narrower (e.g., 'just check CI'), surface and confirm.
@@ -143,10 +205,10 @@ if [ "$PLANNING_VERB_MATCH" -eq 1 ] || [ "$RIGOR_AMPLIFIER_MATCH" -eq 1 ]; then
   ENV_AXIS_LABEL=$(slot env_axis_label "your environment/blast-radius classification axis")
   if [ "$PLANNING_VERB_MATCH" -eq 1 ] && has_slot planning_skill; then
     PLANNING_SKILL=$(slot planning_skill "")
-    CTX="${CTX}INTENT — PLANNING WITH RIGOR (skill routing). REQUIRED: your next tool call MUST be Skill(skill='${PLANNING_SKILL}'), passing the prompt content as args. The skill encapsulates the phase-gated pipeline (goal → research-before-solving → design draft → open-questions gate → RFC → approval gate → execution) plus the rigor checklist: destructive-op resource table (Resource | ${ENV_AXIS_LABEL} | Verified-where | Status, no open rows), live classification from the source of truth (not memory), evidence from live state only (not repo-grep/state-file/PR-description), ≥3 alternatives when comparing approaches, you as the default executor, ≥1 adversarial failure mode per major step. Doing this manually skips the gates. Exception: if the ask is narrower than the full pipeline, surface the mismatch and act on the answer. This hook only fires on short trigger phrasing (prompt ≤200 chars) — invoke the skill on your own judgment for longer freeform planning-shaped prompts too.
+    CTX="${CTX}INTENT — PLANNING WITH RIGOR (skill routing). REQUIRED: your next tool call MUST be Skill(skill='${PLANNING_SKILL}'), passing the prompt content as args. The skill encapsulates the phase-gated pipeline (goal → research-before-solving → design draft → open-questions gate → RFC → approval gate → execution) plus the rigor checklist: destructive-op resource table (Resource | ${ENV_AXIS_LABEL} | Verified-where | Status, no open rows), live classification from the source of truth (not memory), evidence from live state only (not repo-grep/state-file/PR-description), ≥3 alternatives when comparing approaches, you as the default executor, ≥1 adversarial failure mode per major step. Doing this manually skips the gates. Exception: if the ask is narrower than the full pipeline, surface the mismatch and act on the answer. This hook only fires on short trigger phrasing (prompt ≤400 chars) — invoke the skill on your own judgment for longer freeform planning-shaped prompts too.
 "
   else
-    CTX="${CTX}INTENT — PLANNING WITH RIGOR. Route to your planning skill if configured. If not, apply this checklist inline before presenting any plan: research before solving (no solution before evidence), a destructive-op resource table (Resource | ${ENV_AXIS_LABEL} | Verified-where | Status, no open rows), live classification from the source of truth rather than memory, evidence from live state only, ≥3 alternatives when comparing approaches, you as the default executor, and ≥1 adversarial failure mode named per major step. This hook only fires on short trigger phrasing (prompt ≤200 chars) — apply this on your own judgment for longer freeform planning-shaped prompts too.
+    CTX="${CTX}INTENT — PLANNING WITH RIGOR. Route to your planning skill if configured. If not, apply this checklist inline before presenting any plan: research before solving (no solution before evidence), a destructive-op resource table (Resource | ${ENV_AXIS_LABEL} | Verified-where | Status, no open rows), live classification from the source of truth rather than memory, evidence from live state only, ≥3 alternatives when comparing approaches, you as the default executor, and ≥1 adversarial failure mode named per major step. This hook only fires on short trigger phrasing (prompt ≤400 chars) — apply this on your own judgment for longer freeform planning-shaped prompts too.
 "
   fi
 fi
