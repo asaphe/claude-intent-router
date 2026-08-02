@@ -129,11 +129,24 @@ if [ "$RESOLVER_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE '^((any |new 
   fi
 fi
 
-# Intent 4: PR review request.
-if printf '%s\n' "$NORM" | grep -qE '^(review (the |this )?pr|run (the )?review|trigger (the )?review|adversarial review|reviewers?\??)[.?!]?$'; then
+# Intent 4: PR review request. See: README.md § PR review for the shape/authorship rationale.
+REVIEW_LEAD='((please|pls|can you|could you|can we|lets|let.s|let us|go ahead and|now) )*'
+REVIEW_NOUN='(pr|adversarial|code|full|deep|proper)[ -]review'
+REVIEW_ACT='(do|run|trigger|start|kick ?off|launch|dispatch|spin up) (the |a |an )?(pr |adversarial |code )?review(ers?)?( of (the |this |my |our )?(prs?|pull requests?|diffs?|changes))?'
+# Objects stay disjoint from Intent 3's (comments/threads/feedback) so "review comments" keeps routing there.
+REVIEW_OBJ='(re-?)?review (the |this |that |my |our )?(prs?|pull requests?|diffs?|changes)'
+# Trailing punctuation repeats: the pre-1.2.0 "reviewers?\??" branch accepted two marks, so "reviewers??" must keep firing.
+REVIEW_TAIL='( ?#?[0-9]{1,7}| https?://[^ ]+)?( please| now| again)?'
+if [ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE "^${REVIEW_LEAD}(${REVIEW_NOUN}|${REVIEW_ACT}|${REVIEW_OBJ}|reviewers?$(xp review))${REVIEW_TAIL}[.?!]*$"; then
   if has_slot pr_review_skill; then
     PR_REVIEW_SKILL=$(slot pr_review_skill "")
-    CTX="${CTX}INTENT — PR REVIEW (skill routing). The user is asking for a review of the PR diff. REQUIRED: your next tool call MUST be Skill(skill='${PR_REVIEW_SKILL}'), passing the PR number as args if named. That skill is the configured owner of this intent — reviewing the diff yourself is a skill-routing violation. Apply whatever review discipline the skill defines rather than substituting your own. Exception: if the user's ask is narrower (e.g., 'is the diff sane?'), surface and confirm.
+    REVIEW_ROUTE="REQUIRED: your next tool call MUST be Skill(skill='${PR_REVIEW_SKILL}'), passing the PR number as args if named."
+    # Own-PR vs someone-else's-PR are different jobs; one target silently applies the wrong one.
+    if has_slot pr_review_nonauthor_skill; then
+      PR_REVIEW_NONAUTHOR_SKILL=$(slot pr_review_nonauthor_skill "")
+      REVIEW_ROUTE="AUTHORSHIP DECIDES THE TARGET — the only tool calls permitted before routing are the two authorship lookups, \`gh pr view <PR> --json author --jq .author.login\` and \`gh api user --jq .login\`. Once authorship is known: self-authored → REQUIRED: your next tool call MUST be Skill(skill='${PR_REVIEW_SKILL}'); authored by anyone else → REQUIRED: your next tool call MUST be Skill(skill='${PR_REVIEW_NONAUTHOR_SKILL}') instead, which owns the CI verification and reviewer-scope resolution the own-PR path deliberately skips. Authorship you cannot resolve counts as non-author. Pass the PR number as args if named."
+    fi
+    CTX="${CTX}INTENT — PR REVIEW (skill routing). The user is asking for a review of the PR diff. ${REVIEW_ROUTE} That skill is the configured owner of this intent — reviewing the diff yourself is a skill-routing violation. Apply whatever review discipline the skill defines rather than substituting your own. If the mandated skill is not loadable in this session (a repo-scoped skill while the working directory sits outside that repo), say so plainly and review instead with independent per-axis passes covering correctness, security and any domain-specific risk the diff touches, labelling that as a fallback — do not silently improvise a review in its place. Exception: if the user's ask is narrower (e.g., 'is the diff sane?'), surface and confirm.
 "
   else
     REVIEWER_ROSTER=$(slot reviewer_roster "one per axis")

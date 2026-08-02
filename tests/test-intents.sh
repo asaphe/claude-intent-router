@@ -90,12 +90,52 @@ assert_no_match "comment on this approach"
 
 # Intent 4 — PR review request
 assert_match    "review the pr" "PR REVIEW"
+assert_match    "review pr" "PR REVIEW"
+assert_match    "review this pr" "PR REVIEW"
 assert_match    "run the review" "PR REVIEW"
 assert_match    "trigger the review" "PR REVIEW"
 assert_match    "adversarial review" "PR REVIEW"
+# Noun order, PR refs and politeness wrappers — the shapes the anchored pattern used to miss entirely.
+assert_match    "pr review" "PR REVIEW"
+assert_match    "PR Review" "PR REVIEW"
+assert_match    "code review" "PR REVIEW"
+assert_match    "review pr 123" "PR REVIEW"
+assert_match    "review pr #42" "PR REVIEW"
+assert_match    "review the pr https://github.com/o/r/pull/7" "PR REVIEW"
+assert_match    "can you review the pr" "PR REVIEW"
+assert_match    "lets review the pr" "PR REVIEW"
+assert_match    "review this pr please" "PR REVIEW"
+assert_match    "please do a pr review" "PR REVIEW"
+assert_match    "review the diff" "PR REVIEW"
+assert_match    "review the changes" "PR REVIEW"
+assert_match    "run the reviewers" "PR REVIEW"
 assert_match    "reviewers" "PR REVIEW"
 assert_match    "reviewers?" "PR REVIEW"
+# The pre-1.2.0 branch was "reviewers?\??" — two trailing marks fired then and must still fire.
+assert_match    "reviewers??" "PR REVIEW"
+assert_match    "reviewer??" "PR REVIEW"
+assert_match    "reviewers?!" "PR REVIEW"
+# Possessives and the spelled-out object: "review my pr" is the commonest form the first cut missed.
+assert_match    "review my pr" "PR REVIEW"
+assert_match    "review our pr" "PR REVIEW"
+assert_match    "review my changes" "PR REVIEW"
+assert_match    "review the pull request" "PR REVIEW"
+assert_match    "do a review of the pr" "PR REVIEW"
+# The noun separator is mandatory, so run-together words are not review triggers.
+assert_no_match "prreview"
+assert_no_match "deepreview"
 assert_no_match "reviewers usually miss this kind of bug"
+assert_no_match "dont review the pr"
+assert_no_match "review"
+assert_no_match "review this"
+# Intent 3 owns comment objects — widening Intent 4 must not poach them.
+raw=$(run_hook "review comments")
+out=$(printf '%s' "$raw" | jq -r '.hookSpecificOutput.additionalContext')
+if printf '%s' "$out" | grep -qF "COMMENT/THREAD SWEEP" && ! printf '%s' "$out" | grep -qF "PR REVIEW"; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); printf 'FAIL: "review comments" must stay with the comment sweep, got: %.120s\n' "$out"
+fi
 
 # Intent 5 — finalize / merge-intent phrasing
 assert_match    "finalize" "FINALIZE"
@@ -287,6 +327,18 @@ done
 jq -n '{watch_bot_pattern:"bugbot"}' > "$CFG_C"
 assert_match "wait for bugbot" "PROACTIVE-REPORT"
 
+# Intent 4 gained an extra_patterns hook; it must be additive exactly like finalize/resolver.
+jq -n '{pr_review_skill:"pr-review", extra_patterns:{review:["revoo","look at the pr"]}}' > "$CFG_C"
+assert_match    "revoo" "Skill(skill='pr-review')"
+assert_match    "look at the pr" "Skill(skill='pr-review')"
+assert_match    "review the pr" "Skill(skill='pr-review')"
+assert_no_match "deploy the staging cluster"
+for bad in '["revoo",""]' '["|revoo"]' '[" "]'; do
+  jq -n --argjson f "$bad" '{pr_review_skill:"pr-review", extra_patterns:{review:$f}}' > "$CFG_C"
+  assert_no_match "deploy the staging cluster"
+  assert_match    "review the pr" "Skill(skill='pr-review')"
+done
+
 # Fragments are matched against a lowercased prompt, so they must be case-folded rather than silently dead.
 jq -n '{pr_finalize_skill:"pr-finalize", extra_patterns:{finalize:["FINALZ"]}}' > "$CFG_C"
 assert_match "run finalz" "Skill(skill='pr-finalize')"
@@ -313,6 +365,7 @@ mkdir -p "$TMPHOME_D/.claude"
 jq -n '{
   pr_check_skill: "pr-check",
   pr_review_skill: "pr-review",
+  pr_review_nonauthor_skill: "adversarial-pr-review",
   pr_finalize_skill: "pr-finalize",
   pr_resolver_skill: "pr-resolver",
   planning_skill: "planning"
@@ -340,6 +393,38 @@ done
 assert_match "resolve comments on pr" "resolve first and finalize after"
 assert_match "resolve comments on pr" "never call the merge command yourself"
 assert_match "ship it" "never call the merge command yourself"
+
+# A configured skill can still be unreachable; the mandate must carry its own escape hatch.
+assert_match "review the pr" "not loadable in this session"
+
+# Authorship split: both targets named, and the own-PR skill is still the self-authored branch.
+assert_match "review the pr" "AUTHORSHIP DECIDES THE TARGET"
+assert_match "review the pr" "Skill(skill='adversarial-pr-review')"
+assert_match "review the pr" "Skill(skill='pr-review')"
+# The lookups must be carved out explicitly, or "next tool call MUST be Skill()" is unsatisfiable.
+assert_match "review the pr" "the only tool calls permitted before routing"
+# The escape hatch must state its fallback, not point at text that only the else-branch emits.
+for p in "check comments" "review the pr" "ship it" "resolve comments on pr" "lets plan this"; do
+  raw=$(run_hook "$p")
+  out=$(printf '%s' "$raw" | jq -r '.hookSpecificOutput.additionalContext')
+  if printf '%s' "$out" | grep -qF "discipline below"; then
+    FAIL=$((FAIL + 1)); printf 'FAIL: "%s" references absent "discipline below" text\n' "$p"
+  else
+    PASS=$((PASS + 1))
+  fi
+done
+
+# With no non-author skill configured, the split must vanish rather than degrade to a half-mandate.
+jq -n '{pr_review_skill: "pr-review"}' > "$TMPHOME_D/.claude/intent-router.config.json"
+assert_match "review the pr" "Skill(skill='pr-review')"
+assert_match "review the pr" "REQUIRED: your next tool call MUST be Skill("
+raw=$(run_hook "review the pr")
+out=$(printf '%s' "$raw" | jq -r '.hookSpecificOutput.additionalContext')
+if printf '%s' "$out" | grep -qF "AUTHORSHIP DECIDES THE TARGET"; then
+  FAIL=$((FAIL + 1)); printf 'FAIL: authorship split leaked without pr_review_nonauthor_skill set\n'
+else
+  PASS=$((PASS + 1))
+fi
 
 rm -rf "$TMPHOME_D"
 
