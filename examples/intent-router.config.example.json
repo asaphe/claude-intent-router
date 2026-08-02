@@ -5,6 +5,7 @@
   "watch_bot_pattern": "",
   "pr_check_skill": "",
   "pr_review_skill": "",
+  "pr_review_nonauthor_skill": "",
   "pr_finalize_skill": "",
   "pr_resolver_skill": "",
   "planning_skill": "",
@@ -15,6 +16,7 @@
   "code_review_skill": "",
   "extra_patterns": {
     "finalize": [],
-    "resolver": []
+    "resolver": [],
+    "review": []
   }
 }

@@ -43,6 +43,7 @@ real one).
 | `watch_bot_pattern` | Name of your PR review bot, e.g. `codecov\|renovate` |
 | `pr_check_skill` | Name of your PR-comment-sweep skill, if you have one |
 | `pr_review_skill` | Name of your PR-review skill, if you have one |
+| `pr_review_nonauthor_skill` | Name of a separate skill for reviewing a PR you did *not* author, if you have one. Set it **alongside** `pr_review_skill` and the PR-review mandate resolves authorship first and routes to the matching skill; leave it empty and `pr_review_skill` handles both cases. On its own it is a no-op — the routing branch is gated on `pr_review_skill` |
 | `pr_finalize_skill` | Name of your pre-merge-check skill, if you have one |
 | `pr_resolver_skill` | Name of your PR-comment-resolution skill, if you have one |
 | `planning_skill` | Name of your planning/RFC skill, if you have one |
@@ -62,13 +63,24 @@ plugin, so they never ship to anyone else:
 ```json
 "extra_patterns": {
   "finalize": ["finalz", "wrap it up"],
-  "resolver": ["triage threads"]
+  "resolver": ["triage threads"],
+  "review": ["look it over"]
 }
 ```
 
 Fragments are **additive**: they extend the shipped alternation and can never
 replace or disable it, so a bad value degrades to the stock behaviour rather
-than breaking the intent. Recognised keys are `finalize` and `resolver`.
+than breaking the intent. Recognised keys are `finalize`, `resolver` and
+`review`.
+
+Two caveats specific to `review`. Its fragments splice into a **whole-prompt
+anchored** pattern, whereas `finalize` and `resolver` splice into substring
+matchers — so `"triage threads"` fires inside a longer sentence while
+`"look it over"` only fires as the entire prompt. And a fragment that restates
+another intent's trigger (`"review comments"`, `"resolve the pr"`) makes both
+intents fire and emit two conflicting `Skill()` mandates; the shipped
+alternations are disjoint by construction, but nothing validates a fragment
+against them.
 
 Each fragment must consist of letters, digits, `_`, spaces or `-`, and contain
 at least one letter or digit; anything else is dropped. Fragments are matched
@@ -87,6 +99,29 @@ resolver, planning) only emit a hard `Skill()` mandate when the relevant slot
 is configured; otherwise they fall back to an inline checklist. A read-only
 `skeptic` agent ships alongside it for root-cause/debugging/incident
 answers — see `agents/skeptic.md`.
+
+### PR review
+
+The PR-review intent is whole-prompt anchored like most others, but tolerates
+the three shapes a strict verb-first pattern rejects outright: noun order
+(`pr review`, `code review`), a trailing PR reference (`review pr 123`,
+`review pr #42`, a pasted `/pull/` URL), and a politeness or imperative
+wrapper (`can you review the pr`, `please do a pr review`). Its objects
+(`pr`, `diff`, `changes`) are kept disjoint from the comment-sweep intent's
+(`comments`, `threads`, `feedback`) so `review comments` routes to exactly one
+of them rather than firing both mandates.
+
+Reviewing your own PR and reviewing someone else's are different jobs — CI
+verification, reviewer-scope resolution and pushback posture apply only to the
+latter — so a single configured target silently applies the wrong discipline to
+one of them. Set `pr_review_nonauthor_skill` alongside `pr_review_skill` and the
+mandate resolves authorship first, then routes to the matching skill; authorship
+that cannot be resolved is treated as non-author. Setting it without
+`pr_review_skill` does nothing, since the whole routing branch is gated on the
+latter. The mandate also carries an
+explicit escape hatch for a configured skill that is not loadable in the current
+session — a repo-scoped skill while the working directory sits outside that
+repo — so the assistant says so instead of quietly improvising a review.
 
 ## Contributing
 
