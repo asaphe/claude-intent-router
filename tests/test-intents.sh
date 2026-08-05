@@ -264,6 +264,28 @@ assert_no_match "orca sighting today"
 assert_match    "pause" "PAUSE"
 assert_match    "please pause" "PAUSE"
 
+# Intent 15 — imperative / defect-declarative
+assert_match    "proceed" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_match    "just do it" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_match    "do it now" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_match    "go ahead" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_match    "stop asking me and just fix it" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_match    "that's not useful" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_match    "the regex is wrong because it misses the anchor" "IMPERATIVE / DEFECT-DECLARATIVE"
+# A numbered reply is the ordinary shape when answering a multi-part question.
+assert_match    "1. proceed" "IMPERATIVE / DEFECT-DECLARATIVE"
+# The carve-out is the whole reason this intent is safe to fire — a rewrite that drops it silently authorizes destructive work.
+assert_match    "proceed" "still requires its own explicit approval"
+# Interrogatives must stay silent: firing here suppresses a clarifying question that was owed.
+assert_no_match "should I proceed?"
+assert_no_match "do you think we should do it now?"
+assert_no_match "can you continue the migration tomorrow?"
+assert_no_match "why is this not useful to the reviewer?"
+assert_no_match "is that not correct in your view?"
+assert_no_match "3. continue reading the plan and tell me what you think"
+# The shared negation guard must suppress a declined imperative.
+assert_no_match "don't do it yet"
+
 rm -rf "$TMPHOME_A"
 
 # ---------- Phase B: config present — hard-mandate routing, null/false handling, injection safety ----------

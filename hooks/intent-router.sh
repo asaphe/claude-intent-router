@@ -263,6 +263,20 @@ if printf '%s\n' "$NORM" | grep -qE '^(please )?(lets |let.s )?pause( here| now|
 "
 fi
 
+# Intent 15: imperative / defect-declarative — anchored hard because a false positive suppresses a clarifying question that may have been owed.
+if [ "$NEGATION_MATCH" -eq 0 ] && { \
+     printf '%s\n' "$NORM" | grep -qE '^([0-9]+[.)] *)?(ok|okay|yes|right)?[,. ]*(just )?(do it|proceed|go ahead|continue)( now| already| please| with (it|this|that))?[.!]*$' \
+  || printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(stop asking|quit asking|is wrong because|thats wrong because)' \
+  || printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(thats|that.s|its|it.s|this is) not (useful|general enough|right|correct|helpful|what i (asked|meant|wanted))' \
+  || printf '%s\n' "$NORM" | grep -qE 'not useful[.!]*$'; }; then
+  CTX="${CTX}INTENT — IMPERATIVE / DEFECT-DECLARATIVE. The user is instructing, not asking. Both an imperative ('do it', 'proceed', 'stop asking') and a declarative naming a defect ('X is wrong because Y', 'that's not useful') are instructions. Required posture this turn:
+  1. Your next turn is a TOOL CALL, not a clarifying question and not an analysis of whether they are right. The premise was settled in a prior turn — re-arguing it spends a turn re-litigating what was already decided.
+  2. Do NOT undo a change you made at their direction while 'looking into it'. Reverting their work is an action, not a neutral pause.
+  3. A named defect is a report to fix, not a claim to evaluate. Verify by reading the artifact, then correct it — do not open by defending the prior version.
+  4. Carve-out, unchanged: a shared-state mutation (force-push, history rewrite, deletion, production change, external post) still requires its own explicit approval. 'Proceed' authorizes the work, never the approval gate on top of it.
+"
+fi
+
 [ -z "$CTX" ] && exit 0
 
 jq -n --arg ctx "$CTX" '{
