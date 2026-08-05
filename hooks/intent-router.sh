@@ -265,7 +265,7 @@ fi
 
 # Intent 15: imperative / defect-declarative — anchored hard because a false positive suppresses a clarifying question that may have been owed.
 if [ "$NEGATION_MATCH" -eq 0 ] && { \
-     printf '%s\n' "$NORM" | grep -qE '^([0-9]+[.)] *)?(ok|okay|yes|right)?[,. ]*(just )?(do it|proceed|go ahead|continue)( now| already| please| with (it|this|that))?[.!]*$' \
+     printf '%s\n' "$NORM" | grep -qE '^([0-9]+[.)] *)?(ok|okay|yes|right)?[,. ]*(just )?(do it|proceed|go ahead|continue)( now| already| please)?( with [a-z0-9 ._-]{1,40})?[.!]*$' \
   || printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(stop asking|quit asking|is wrong because|thats wrong because)' \
   || printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(thats|that.s|its|it.s|this is) not (useful|general enough|right|correct|helpful|what i (asked|meant|wanted))' \
   || printf '%s\n' "$NORM" | grep -qE 'not useful[.!]*$'; }; then

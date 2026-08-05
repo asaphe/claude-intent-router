@@ -274,6 +274,11 @@ assert_match    "that's not useful" "IMPERATIVE / DEFECT-DECLARATIVE"
 assert_match    "the regex is wrong because it misses the anchor" "IMPERATIVE / DEFECT-DECLARATIVE"
 # A numbered reply is the ordinary shape when answering a multi-part question.
 assert_match    "1. proceed" "IMPERATIVE / DEFECT-DECLARATIVE"
+# "proceed with the merge" is the highest-stakes imperative and fired NO intent before the tail was widened.
+assert_match    "proceed with the merge" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_match    "proceed with the merge" "still requires its own explicit approval"
+assert_match    "go ahead with the rebase" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_no_match "should I proceed with the merge?"
 # The carve-out is the whole reason this intent is safe to fire — a rewrite that drops it silently authorizes destructive work.
 assert_match    "proceed" "still requires its own explicit approval"
 # Interrogatives must stay silent: firing here suppresses a clarifying question that was owed.
