@@ -277,6 +277,33 @@ if [ "$NEGATION_MATCH" -eq 0 ] && { \
 "
 fi
 
+# Intent 16: design-document authoring/review — these carry no planning verb, so Intent 9 never sees them.
+DESIGNDOC_TYPE='(hlds?|llds?|rfcs?|adrs?|design (docs?|documents?|proposals?)|architecture (docs?|documents?|proposals?)|tech(nical)? specs?)'
+DESIGNDOC_WRITE='(write|draft|author|create|prepare|produce|put together)'
+DESIGNDOC_CRIT='(review|critique|grade|assess|evaluate|sanity.?check|poke holes in)'
+# Head-anchored like most intents: unanchored it fires inside narration that merely mentions the artifact; see: README.md § Design documents
+DESIGNDOC_LEAD='((please|pls|can you|could you|can we|lets|let.s|let us|go ahead and|now) )*'
+# A subject usually sits between verb and type noun ("write a billing-service hld").
+DESIGNDOC_GAP='(a |an |the |this |that |my |our )?([a-z0-9-]+ ){0,4}'
+DESIGNDOC_MATCH=0
+# "rfc 7231" cites a published standard, never the artifact this intent is about.
+if [ "$NEGATION_MATCH" -eq 0 ] && ! printf '%s\n' "$NORM" | grep -qE "${DESIGNDOC_TYPE} ?#?[0-9]"; then
+  printf '%s\n' "$NORM" | grep -qE "^${DESIGNDOC_LEAD}${DESIGNDOC_WRITE} ${DESIGNDOC_GAP}${DESIGNDOC_TYPE}([^a-z].*)?\$" && DESIGNDOC_MATCH=1
+  printf '%s\n' "$NORM" | grep -qE "^${DESIGNDOC_LEAD}${DESIGNDOC_CRIT} ${DESIGNDOC_GAP}${DESIGNDOC_TYPE}([^a-z].*)?\$" && DESIGNDOC_MATCH=1
+  printf '%s\n' "$NORM" | grep -qE "^${DESIGNDOC_LEAD}${DESIGNDOC_TYPE} (review|critique)([^a-z].*)?\$" && DESIGNDOC_MATCH=1
+  printf '%s\n' "$NORM" | grep -qE "^is ${DESIGNDOC_GAP}${DESIGNDOC_TYPE}( any good| ok(ay)?| good| sound| solid| right| correct)?[.?!]*\$" && DESIGNDOC_MATCH=1
+fi
+if [ "$DESIGNDOC_MATCH" -eq 1 ]; then
+  if has_slot design_doc_skill; then
+    DESIGN_DOC_SKILL=$(slot design_doc_skill "")
+    CTX="${CTX}INTENT — DESIGN DOCUMENT (skill routing). The user is asking for an architecture document to be authored or critiqued — HLD, LLD, RFC, ADR or design doc — not an implementation and not a project plan. REQUIRED: your next tool call MUST be Skill(skill='${DESIGN_DOC_SKILL}'), passing the prompt content as args. That skill is the configured owner of this intent — drafting or grading the document from your own sense of what belongs in one is a skill-routing violation. Apply whatever per-type section spine and evidence bar it defines. If a planning intent also fired this turn, the planning skill owns the process and this one owns the artifact: run planning first and let it reach this. Exception: if the ask is narrower than the full pipeline (e.g., 'what goes in an ADR?'), surface the mismatch and act on the answer. This hook only fires on short trigger phrasing (prompt ≤400 chars) — invoke the skill on your own judgment for longer freeform document-shaped prompts too.
+"
+  else
+    CTX="${CTX}INTENT — DESIGN DOCUMENT. Route to your design-document skill if you have one configured. If not, apply this discipline inline: choose the artifact type deliberately and say which you chose (ADR for a single decision, HLD for a reviewable shape, LLD for an executable contract, RFC for an HLD circulated for agreement); carry that type's required sections rather than a generic outline; cite every load-bearing fact to a command, file:line or URL rather than to memory; and before delivering, enumerate what an implementer would still have to invent — a non-empty list means the document is not finished. Exception: if the ask is narrower (e.g., 'what goes in an ADR?'), surface the mismatch and act on the answer.
+"
+  fi
+fi
+
 [ -z "$CTX" ] && exit 0
 
 jq -n --arg ctx "$CTX" '{

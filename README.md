@@ -47,6 +47,7 @@ real one).
 | `pr_finalize_skill` | Name of your pre-merge-check skill, if you have one |
 | `pr_resolver_skill` | Name of your PR-comment-resolution skill, if you have one |
 | `planning_skill` | Name of your planning/RFC skill, if you have one |
+| `design_doc_skill` | Name of your design-document skill, if you have one — the one that owns HLD/LLD/RFC/ADR *authoring and critique*, as opposed to the planning process around it |
 | `reviewer_roster` | Comma-separated list of your reviewer agents, if any. Fallback text only — ignored when `pr_review_skill` is set |
 | `env_axis_label` | Your environment/blast-radius classification axis, e.g. staging/prod or tenant tier. Fallback text only — ignored when `planning_skill` is set |
 | `rigor_doc_path` | Path or name of a rigor/review-discipline doc to cite, if you have one |
@@ -122,6 +123,26 @@ latter. The mandate also carries an
 explicit escape hatch for a configured skill that is not loadable in the current
 session — a repo-scoped skill while the working directory sits outside that
 repo — so the assistant says so instead of quietly improvising a review.
+
+### Design documents
+
+"Write an HLD for X", "review this RFC", "is this design doc any good" are
+document asks, and none of them contains a planning verb — so the planning
+intent never sees them, which is the gap this intent closes. It fires on a
+document-type noun (`hld`, `lld`, `rfc`, `adr`, `design doc`, `architecture
+document`, `tech spec`) reached from an authoring verb (`write`, `draft`,
+`author`, …) or a critique verb (`review`, `critique`, `grade`, …), allowing a
+short run of words between the two so `write a billing-service hld` still
+fires.
+
+Two deliberate boundaries. A digit immediately after the type noun disqualifies
+the whole prompt, because `review rfc 7231` cites a published standard rather
+than asking for one to be written. And the type nouns are kept disjoint from the
+PR-review intent's objects (`pr`, `diff`, `changes`), so `review the rfc` and
+`review the pr` each fire exactly one mandate. Planning and design-document asks
+*can* legitimately both fire — "let's plan the migration and draft an RFC" is
+genuinely both — and the injected text says which owns what: planning owns the
+process, this owns the artifact.
 
 ## Contributing
 
