@@ -15,5 +15,9 @@ short-phrase intents and injects skill-routing or rigor-checklist context.
   `examples/intent-router.config.example.json` or the user's own
   `~/.claude/intent-router.config.json`, never hardcoded into the hook/agent
   body.
-- Run `claude plugin validate .` locally before pushing — there is no CI on
-  this repo yet, so nothing else catches a manifest typo.
+- Run `claude plugin validate . --strict` locally before pushing. Because
+  `marketplace.json` declares this repo as the only plugin it ships
+  (`"source": "./"`), that single command validates both manifests, and
+  `--strict` fails on fields the runtime would otherwise tolerate. CI
+  (`plugin-validate.yaml`) runs the same command, alongside shellcheck and the
+  test suite.

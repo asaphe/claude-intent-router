@@ -153,8 +153,15 @@ plan the migration and draft an RFC` fires planning alone.
 
 ## Contributing
 
-Validate the manifest locally before pushing:
+Validate the manifests and run the test suite locally before pushing:
 
 ```
-claude plugin validate .
+claude plugin validate . --strict
+bash tests/test-intents.sh
 ```
+
+`marketplace.json` declares this repo as the only plugin it ships
+(`"source": "./"`), so that single validate command covers both manifests, and
+`--strict` fails on fields the runtime would otherwise tolerate. CI runs the
+same two checks, plus shellcheck and a second pass of the suite under BusyBox
+grep.
