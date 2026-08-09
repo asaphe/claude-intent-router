@@ -131,18 +131,25 @@ document asks, and none of them contains a planning verb — so the planning
 intent never sees them, which is the gap this intent closes. It fires on a
 document-type noun (`hld`, `lld`, `rfc`, `adr`, `design doc`, `architecture
 document`, `tech spec`) reached from an authoring verb (`write`, `draft`,
-`author`, …) or a critique verb (`review`, `critique`, `grade`, …), allowing a
-short run of words between the two so `write a billing-service hld` still
-fires.
+`update`, `revise`, …) or a critique verb (`review`, `critique`, `grade`, …),
+allowing a short run of words between the two so `write a billing-service hld`
+still fires.
 
-Two deliberate boundaries. A digit immediately after the type noun disqualifies
-the whole prompt, because `review rfc 7231` cites a published standard rather
-than asking for one to be written. And the type nouns are kept disjoint from the
-PR-review intent's objects (`pr`, `diff`, `changes`), so `review the rfc` and
-`review the pr` each fire exactly one mandate. Planning and design-document asks
-*can* legitimately both fire — "let's plan the migration and draft an RFC" is
-genuinely both — and the injected text says which owns what: planning owns the
-process, this owns the artifact.
+What may follow the type noun is deliberately closed: punctuation, or a
+connector such as `for`, `about`, `then` or `please`. A bare noun after it means
+the type is being used as a modifier rather than as the artifact, so `write a
+design doc parser` and `create an adr directory` are asking for code and do not
+fire. The same rule drops `review rfc 7231`, where the digit marks a citation of
+a published standard — and because it is scoped to the matched noun rather than
+to the whole prompt, `review the design doc then check rfc 7231` still fires.
+
+The type nouns are kept disjoint from the PR-review intent's objects (`pr`,
+`diff`, `changes`), so `review the rfc` and `review the pr` each fire exactly
+one mandate. Planning and design-document asks can legitimately both fire, and
+the injected text says which owns what: planning owns the process, this owns the
+artifact. Because this intent is head-anchored, co-firing needs the document verb
+to lead — `draft an RFC, then let's plan the rollout` fires both, while `let's
+plan the migration and draft an RFC` fires planning alone.
 
 ## Contributing
 

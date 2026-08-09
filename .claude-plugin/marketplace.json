@@ -8,7 +8,7 @@
     {
       "name": "intent-router",
       "source": "./",
-      "description": "UserPromptSubmit hook that detects high-confidence short-phrase intents (status checks, merge confirmations, PR review/finalize/comment-resolution requests, planning triggers, pause) and injects skill-routing or rigor-checklist context. Configurable via ~/.claude/intent-router.config.json for project-specific skill names and vocabulary; works with generic fallback text out of the box."
+      "description": "UserPromptSubmit hook that detects high-confidence short-phrase intents (status checks, merge confirmations, PR review/finalize/comment-resolution requests, planning triggers, design-document authoring and review, imperatives, pause) and injects skill-routing or rigor-checklist context. Configurable via ~/.claude/intent-router.config.json for project-specific skill names and vocabulary; works with generic fallback text out of the box."
     }
   ]
 }

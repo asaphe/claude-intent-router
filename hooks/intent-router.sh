@@ -279,18 +279,20 @@ fi
 
 # Intent 16: design-document authoring/review — these carry no planning verb, so Intent 9 never sees them.
 DESIGNDOC_TYPE='(hlds?|llds?|rfcs?|adrs?|design (docs?|documents?|proposals?)|architecture (docs?|documents?|proposals?)|tech(nical)? specs?)'
-DESIGNDOC_WRITE='(write|draft|author|create|prepare|produce|put together)'
+DESIGNDOC_WRITE='(write|draft|author|create|prepare|produce|put together|update|revise|rework|redraft|expand|flesh out)'
 DESIGNDOC_CRIT='(review|critique|grade|assess|evaluate|sanity.?check|poke holes in)'
 # Head-anchored like most intents: unanchored it fires inside narration that merely mentions the artifact; see: README.md § Design documents
 DESIGNDOC_LEAD='((please|pls|can you|could you|can we|lets|let.s|let us|go ahead and|now) )*'
 # A subject usually sits between verb and type noun ("write a billing-service hld").
 DESIGNDOC_GAP='(a |an |the |this |that |my |our )?([a-z0-9-]+ ){0,4}'
+DESIGNDOC_CONN='(for|on|about|around|covering|of|to|that|which|and|then|so|before|after|with|from|please|now|again|first|instead|asap|today|tomorrow)'
+# Only punctuation or a connector may follow the type noun — a bare noun makes it a modifier ("design doc parser"), and a digit makes it a citation ("rfc 7231"); see: README.md § Design documents
+DESIGNDOC_TAIL="([.,;:?!]+.*)?( ${DESIGNDOC_CONN}([^a-z].*)?)?\$"
 DESIGNDOC_MATCH=0
-# "rfc 7231" cites a published standard, never the artifact this intent is about.
-if [ "$NEGATION_MATCH" -eq 0 ] && ! printf '%s\n' "$NORM" | grep -qE "${DESIGNDOC_TYPE} ?#?[0-9]"; then
-  printf '%s\n' "$NORM" | grep -qE "^${DESIGNDOC_LEAD}${DESIGNDOC_WRITE} ${DESIGNDOC_GAP}${DESIGNDOC_TYPE}([^a-z].*)?\$" && DESIGNDOC_MATCH=1
-  printf '%s\n' "$NORM" | grep -qE "^${DESIGNDOC_LEAD}${DESIGNDOC_CRIT} ${DESIGNDOC_GAP}${DESIGNDOC_TYPE}([^a-z].*)?\$" && DESIGNDOC_MATCH=1
-  printf '%s\n' "$NORM" | grep -qE "^${DESIGNDOC_LEAD}${DESIGNDOC_TYPE} (review|critique)([^a-z].*)?\$" && DESIGNDOC_MATCH=1
+if [ "$NEGATION_MATCH" -eq 0 ]; then
+  printf '%s\n' "$NORM" | grep -qE "^${DESIGNDOC_LEAD}${DESIGNDOC_WRITE} ${DESIGNDOC_GAP}${DESIGNDOC_TYPE}${DESIGNDOC_TAIL}" && DESIGNDOC_MATCH=1
+  printf '%s\n' "$NORM" | grep -qE "^${DESIGNDOC_LEAD}${DESIGNDOC_CRIT} ${DESIGNDOC_GAP}${DESIGNDOC_TYPE}${DESIGNDOC_TAIL}" && DESIGNDOC_MATCH=1
+  printf '%s\n' "$NORM" | grep -qE "^${DESIGNDOC_LEAD}${DESIGNDOC_TYPE} (review|critique)${DESIGNDOC_TAIL}" && DESIGNDOC_MATCH=1
   printf '%s\n' "$NORM" | grep -qE "^is ${DESIGNDOC_GAP}${DESIGNDOC_TYPE}( any good| ok(ay)?| good| sound| solid| right| correct)?[.?!]*\$" && DESIGNDOC_MATCH=1
 fi
 if [ "$DESIGNDOC_MATCH" -eq 1 ]; then

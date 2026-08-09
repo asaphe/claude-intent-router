@@ -40,7 +40,13 @@ assert_no_match() {
 assert_lacks() {
   local prompt="$1" unexpected="$2" raw out
   raw=$(run_hook "$prompt")
-  if [ -z "$raw" ]; then out=""; else out=$(printf '%s' "$raw" | jq -r '.hookSpecificOutput.additionalContext'); fi
+  # A silent hook satisfies every negative assertion, so absence only counts once something was emitted.
+  if [ -z "$raw" ]; then
+    FAIL=$((FAIL + 1))
+    printf 'FAIL lacks:    "%s" emitted nothing — a vacuous pass, not a disjointness proof\n' "$prompt"
+    return
+  fi
+  out=$(printf '%s' "$raw" | jq -r '.hookSpecificOutput.additionalContext')
   if printf '%s' "$out" | grep -qF "$unexpected"; then
     FAIL=$((FAIL + 1))
     printf 'FAIL lacks:    "%s" expected NOT to contain "%s"\n' "$prompt" "$unexpected"
@@ -264,15 +270,35 @@ assert_match    "is this hld any good" "DESIGN DOCUMENT"
 assert_match    "grade my adr" "DESIGN DOCUMENT"
 assert_match    "hld review" "DESIGN DOCUMENT"
 assert_match    "write a technical spec" "DESIGN DOCUMENT"
+# Revising an existing document is the same intent as writing one.
+assert_match    "update the hld" "DESIGN DOCUMENT"
+assert_match    "revise the design doc" "DESIGN DOCUMENT"
+# A connector after the type noun keeps the noun as the artifact, so these stay live.
+assert_match    "review my adr please" "DESIGN DOCUMENT"
+assert_match    "draft an rfc for v2 of the api" "DESIGN DOCUMENT"
+# A bare noun after the type noun makes it a modifier — these ask for code, not a document.
+assert_no_match "write a design doc parser"
+assert_no_match "create a design doc review agent"
+assert_no_match "draft an rfc template generator"
+assert_no_match "write an hld linter in python"
+assert_no_match "create an adr directory in the repo"
+assert_no_match "assess the rfc parsing library"
+assert_no_match "review the design doc workflow code"
 # A published-standard citation is not a request to author one.
 assert_no_match "review rfc 7231"
 assert_no_match "read rfc #2616"
+# ...but a citation elsewhere in the prompt must not veto a genuine ask.
+assert_match    "review the design doc then check rfc 7231" "DESIGN DOCUMENT"
 assert_no_match "dont write an hld yet"
 # The type nouns stay disjoint from the PR-review intent's objects, so each fires exactly one mandate.
 assert_lacks    "review this rfc" "PR REVIEW"
 assert_lacks    "review the pr" "DESIGN DOCUMENT"
 # No planning verb here — this is the whole reason the intent exists.
 assert_lacks    "write an hld for the billing service" "PLANNING"
+# Co-firing is real but needs the document verb to lead, since this intent is head-anchored.
+assert_match    "draft an rfc, then lets plan the rollout" "DESIGN DOCUMENT"
+assert_match    "draft an rfc, then lets plan the rollout" "PLANNING"
+assert_lacks    "lets plan the migration and draft an rfc" "DESIGN DOCUMENT"
 assert_no_match "the architecture is fine"
 
 # Intent 10 — adversarial review priming (substring by design)
