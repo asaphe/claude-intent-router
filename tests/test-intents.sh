@@ -9,8 +9,9 @@ HOOK="$PLUGIN_ROOT/hooks/intent-router.sh"
 PASS=0
 FAIL=0
 
+# jq -n, not printf: a " or \ in the prompt built malformed JSON, and the silent hook that followed scored as a pass.
 run_hook() {
-  printf '{"prompt":"%s"}' "$1" | "$HOOK" 2>/dev/null
+  jq -n --arg p "$1" '{prompt: $p}' | "$HOOK" 2>/dev/null
 }
 
 assert_match() {
@@ -532,6 +533,21 @@ assert_match "review the pr" "passes (sec-reviewer, perf-reviewer) covering"
 assert_match "lets plan this" "Resource | prod/staging | Verified-where"
 
 rm -rf "$TMPHOME_E"
+
+# ---------- Phase F: prompts carrying JSON metacharacters — a malformed payload silences the hook, and silence is what a negative assertion wants to see ----------
+TMPHOME_F=$(mktemp -d)
+mkdir -p "$TMPHOME_F/.claude"
+export HOME="$TMPHOME_F"
+
+echo "=== Phase F: prompt metacharacters survive the harness ==="
+
+assert_match 'write an hld for the "billing" service' "DESIGN DOCUMENT"
+assert_match 'review the rfc for the "checkout" flow' "DESIGN DOCUMENT"
+assert_match 'write an hld for the c\dev service' "DESIGN DOCUMENT"
+assert_lacks 'write an hld for the "billing" service' "PLANNING"
+assert_no_match 'write a "design doc" parser'
+
+rm -rf "$TMPHOME_F"
 
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
