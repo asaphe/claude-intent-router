@@ -1,8 +1,11 @@
 {
   "name": "intent-router",
   "description": "UserPromptSubmit hook that detects high-confidence short-phrase intents (status checks, merge confirmations, PR review/finalize/comment-resolution requests, planning triggers, design-document authoring and review, imperatives, pause) and injects skill-routing or rigor-checklist context. Configurable via ~/.claude/intent-router.config.json for project-specific skill names and vocabulary; works with generic fallback text out of the box.",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "author": {
     "name": "asaphe"
-  }
+  },
+  "homepage": "https://github.com/asaphe/claude-intent-router",
+  "repository": "https://github.com/asaphe/claude-intent-router",
+  "license": "MIT"
 }

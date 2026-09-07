@@ -1,8 +1,8 @@
 name: Plugin Validate
 
+# No base-branch filter: a PR stacked on another branch would otherwise get no CI at all and read as verified.
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
