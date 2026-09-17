@@ -109,13 +109,9 @@ fi
 FINALIZE_MATCH=0
 # Merge phrasings stay whole-prompt anchored: "merge it" as a substring fires on "dont merge it yet".
 printf '%s\n' "$NORM" | grep -qE '^(is (the )?pr ready|ready to merge|merge ready|wrap up (the )?pr|pre-merge|all (set|done|good) for merge|merge it|merge th(is|ese)( one| pr)?|(please )?go ahead and merge|(lets|let.?s) merge( it| this)?|ship it|ok(ay)? merge( it)?|merge please|merge (it |this )?now)[.?!]?$' && FINALIZE_MATCH=1
-# "can I merge 14" / "I want to merge it" arrive mid-prompt; the object list keeps "I want to merge these two functions" silent.
-# A bare 2+-digit number is a PR whatever follows; a 1-digit one is a count unless it ends the clause. "merge this" needs a PR-like object or none; "into one" is a squash.
-[ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(can i|i want to|want to|shall we|should we) merge( (it|now|both|all|the prs?|#[0-9]{1,7}|[0-9]{2,7})([^a-z]|$)| this( pr| one| code| branch| change| changes| work)?([.?!,(]|$| (and|then|now|please|today|asap|first|already|too|so|if|when|once|after|before|yet|or|as is)([^a-z]|$))| [0-9]([.?!,(]|$)|[.?!,]|$)' \
-   && ! printf '%s\n' "$NORM" | grep -qE 'merge .{0,30}into (a |one|single|the same)' && FINALIZE_MATCH=1
-# The finalize verb is matched as a substring: it is nearly always a trailing clause ("fix everything then finalize"), never the whole prompt.
+# The finalize verb is matched as a substring: it is nearly always a trailing clause ("fix everything then finalize"), never the whole prompt. The noun guard takes the same stems, typo and extra_patterns included.
 if printf '%s\n' "$NORM" | grep -qE "(^|[^a-z])(pr[ -]?)?(finaliz|finalis|final;iz$(xp finalize))[a-z]*" \
-   && ! printf '%s\n' "$NORM" | grep -qE '(finalist|(finaliz|finalis)[a-z]*( [a-z]+){0,3} (naming|convention|approach|design|wording|schema|spec|rfc|doc|docs|document|version|draft|plan|copy|list|format|structure|architecture|decision|name|policy|template|title|message|notes|scheme))'; then
+   && ! printf '%s\n' "$NORM" | grep -qE "(finalist|(finaliz|finalis|final;iz$(xp finalize))[a-z]*( [a-z]+){0,3} "'(naming|convention|approach|design|wording|schema|spec|rfc|doc|docs|document|version|draft|plan|copy|list|format|structure|architecture|decision|name|policy|template|title|message|notes|scheme))'; then
   FINALIZE_MATCH=1
 fi
 
@@ -167,8 +163,11 @@ REVIEW_OBJ='(re-?)?review (the |this |that |my |our )?(prs?|pull requests?|diffs
 REVIEW_TAIL='( ?#?[0-9]{1,7}| https?://[^ ]+)?( please| now| again)?'
 # A PR reference right after the noun fixes the intent, so anything may follow it: "pr review - <url> this part is sensitive".
 REVIEW_REF=' ?[-:]? ?(#[0-9]{1,7}([ .,:;!?].*)?|https?://[^ ]+([ .,:;!?].*)?|[0-9]{2,7}([ .,:;!?].*)?|[0-9]([.,:;!?].*)?)$'
+# The trailing-clause form yields to a resolver or finalize ask in the same prompt, and a comments object after the reference is Intent 3's.
 if [ "$NEGATION_MATCH" -eq 0 ] && { printf '%s\n' "$NORM" | grep -qE "^${REVIEW_LEAD}(${REVIEW_NOUN}|${REVIEW_ACT}|${REVIEW_OBJ}|reviewers?$(xp review))${REVIEW_TAIL}[.?!]*$" \
-     || printf '%s\n' "$NORM" | grep -qE "^${REVIEW_LEAD}(${REVIEW_NOUN}|${REVIEW_OBJ})${REVIEW_REF}"; }; then
+     || { [ "$RESOLVER_MATCH" -eq 0 ] && [ "$FINALIZE_MATCH" -eq 0 ] \
+          && printf '%s\n' "$NORM" | grep -qE "^${REVIEW_LEAD}(${REVIEW_NOUN}|${REVIEW_OBJ})${REVIEW_REF}" \
+          && ! printf '%s\n' "$NORM" | grep -qE "^${REVIEW_LEAD}(${REVIEW_NOUN}|${REVIEW_OBJ}) ?[-:]? ?(#?[0-9]{1,7}|https?://[^ ]+) (comments?|threads?|feedback)([^a-z]|\$)"; }; }; then
   if has_slot pr_review_skill; then
     PR_REVIEW_SKILL=$(slot pr_review_skill "")
     REVIEW_ROUTE="REQUIRED: your next tool call MUST be Skill(skill='${PR_REVIEW_SKILL}'), passing the PR number as args if named."
@@ -240,12 +239,7 @@ fi
 # Intent 9: rigor-amplifier branch is a broad substring match, so only the precise planning-verb branch may hard-mandate.
 PLANNING_VERB_MATCH=0
 [ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(plan (this|that|it)|plan the .+|let.?s plan|need to plan|draft (a |the )?plan|prepare (a |the )?plan|present (the )?plan|planning)[.?!]?$' && PLANNING_VERB_MATCH=1
-# "draft a plan and wait for my go" and "verify, check, plan" are plan-first asks that never end in a planning noun.
-PLAN_NOUN='(present (to me|the (plan|work|options|approach|proposal|path forward)|options)|(^|[^a-z])(options|proposal|path forward)([^a-z]|$)|(^|[.,;:] |(the|a|an|our|your|my|some|with|and|then|lets|let.?s|draft|prepare|propose|outline|write|share|make|give me|list|suggest|research and) )plans?([.,;:]| and| then| first| for| to| it out|$))'
-# "plan" is also the Terraform verb: a TF marker anywhere in the prompt says which sense "plan … wait for my go" carries.
-TF_CONTEXT='(^|[^a-z])(terraform|tofu|tf|init|apply|infra|workspace|module|stack|the plan (looks|is|shows|output|file|diff)|run the plan|plan (output|file|diff))([^a-z]|$)'
-if [ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE "${PLAN_NOUN}"'.{0,80}wait for (my |your )?"?go"?([.!,]|$)' \
-   && ! printf '%s\n' "$NORM" | grep -qE "$TF_CONTEXT"; then PLANNING_VERB_MATCH=1; fi
+# "chart the path forward" and "verify, check, plan" are plan-first asks that never end in a planning noun.
 [ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(chart the path forward|what(.?s| is) (our|the) plan to [a-z]|run (it|this) through planning|(verify|check),? (check|verify)[.,]? plan([.,!]|$))' && PLANNING_VERB_MATCH=1
 RIGOR_AMPLIFIER_MATCH=0
 [ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE '(evidence[- ]based|1000.{0,5}(% )?sure|100% sure|bulletproof|mock and test|verify (everything|the plan|all)|fully verify|before (we|i) (run|execute|merge|apply|destroy|remove))' && RIGOR_AMPLIFIER_MATCH=1
@@ -291,9 +285,7 @@ if printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(why (did|is|are|does|would|wont|
 fi
 
 # Intent 13: pause — literal trigger word, high precision by design.
-if printf '%s\n' "$NORM" | grep -qE '^(please )?(lets |let.s )?pause( here| now| for now| everything| work| session| please)?[.,!? ]*$' \
-   || { printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(gracefully pause|pause and (write|prepare) (a |the )?handoff|(write|prepare) (a |the )?handoff( now)?,? and (then )?pause|we are pausing( here| for now| for today| now)?([.,!]| with| and|$)|i want to pause( for today| here| now)?([.!]|$))|(^|[.,;!?] |(and|then|lets|let.?s|please|now|ok|okay|going to|gonna|gotta|time to|need to|have to|better|should|we are|we.?re|i am|i.?m) )paus(e|ing) (here|for today|now|for now)([.,!?]|$| and| with| (for|until|so|since|because|as|while|before|after|then)([^a-z]|$))' \
-        && ! printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])((should|shall|could|can|would|do we|why not) (we|i|you)( just| maybe| also| yet| now| even)* paus|do you think( we| i)?( should| could| can| might)? paus|(dont|do not|don.?t|never|no need to|not|shouldn.?t|can.?t|cannot)( (we|i|you))?( just| maybe| also| yet| now| even| need to| have to| going to| gonna| gotta| want to| time to| ready to| plan to)* paus)'; }; then
+if printf '%s\n' "$NORM" | grep -qE '^(please )?(lets |let.s )?pause( here| now| for now| everything| work| session| please)?[.,!? ]*$'; then
   CTX="${CTX}INTENT — PAUSE (graceful stop + resume packet). Required now, before anything else:
   1. Finish only the current atomic step safely — no new multi-step or destructive actions this turn.
   2. Emit the full handoff packet (ticket/task, decisions made, live-state snapshots, next steps, file paths) as the LAST message content.

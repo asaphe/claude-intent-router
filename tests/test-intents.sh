@@ -405,10 +405,7 @@ assert_match    "review this pr https://github.com/o/r/pull/11382 this looks lik
 assert_match    "review pr 123 and tell me if the readme is right" "PR REVIEW"
 assert_no_match "review the pr description wording"
 
-# Intent 5 — merge asks mid-prompt, and the "final;ize" typo.
-assert_match    "can i merge 14 we are done with reviews?" "FINALIZE"
-assert_match    "i want to merge 1612. did we simulate the change?" "FINALIZE"
-assert_match    "open the pr. i want to merge it then we apply everywhere" "FINALIZE"
+# Intent 5 — the "final;ize" typo fires; local merges stay silent.
 assert_match    "fix and address all 6 findings and final;ize the pr" "FINALIZE"
 assert_no_match "i want to merge these two functions"
 assert_no_match "should we merge the two modules into one?"
@@ -454,10 +451,7 @@ assert_match    "do we have a bug in the mcp server?" "ROOT-CAUSE"
 assert_no_match "the red team exercise is scheduled"
 assert_no_match "stuck on which name to use"
 
-# Intent 13 — pause paired with a handoff, "pausing here", "pause for today".
-assert_match    "gracefully pause and write a handoff to continue later" "PAUSE"
-assert_match    "i need to go. write the handoff now and pause" "PAUSE"
-assert_match    "merged. we are pausing here with handoff" "PAUSE"
+# Intent 13 — a pause inside a longer or non-conversational prompt stays silent.
 assert_no_match "status? if there is more work i want to pause and discuss"
 assert_no_match "pause the cronjob until monday"
 assert_no_match "we are pausing the rollout for a week"
@@ -503,13 +497,11 @@ assert_match    "check prs for comments/issues before we proceed" "COMMENT/THREA
 assert_no_match "code review: 3 things i noticed in the handler, fix them"
 assert_no_match "pr review - 2 blockers, address them"
 
-# Intent 5 — a declined merge and a count-object merge stay silent; a parenthesised aside after the number still fires.
+# Intent 5 — a declined merge and a count-object merge stay silent.
 assert_no_match "i don't want to merge it yet"
 assert_no_match "we don't want to merge this"
 assert_no_match "i want to merge 3 commits into one"
 assert_no_match "can i merge 2 configmaps into one?"
-assert_match    "can i merge 1565 (from code perspective and our work?)" "FINALIZE"
-assert_match    "any findings? i want to merge" "FINALIZE"
 
 # Intent 6 — "next steps" as a document noun, "what else" continuing a list, "waiting for" as an idiom.
 assert_no_match "update the readme with next steps"
@@ -531,9 +523,6 @@ assert_no_match "deployment is planned for friday. wait for my go"
 assert_no_match "present the findings and wait for my go"
 assert_no_match "what's the plan for today?"
 assert_no_match "what is the plan for the remaining prs?"
-assert_match    "present to me and wait for my go" "PLANNING"
-assert_match    "present the work we are going to do and wait for my go" "PLANNING"
-assert_match    "draft a plan and wait for my go" "PLANNING"
 
 # Intent 10 — a clarification request is not a challenge.
 assert_no_match "i don't understand what you mean by idempotent"
@@ -545,17 +534,12 @@ assert_match    "i don't understand why 880 still has skip_app_deploy if we deci
 assert_no_match "the reviewer is stuck on naming, pick one"
 assert_match    "1461 - zizmor is stuck? 1463 - has comments" "ROOT-CAUSE"
 
-# Intent 13 — negated, interrogative and non-conversational pauses stay silent; clause-led pauses fire.
+# Intent 13 — negated, interrogative and non-conversational pauses stay silent.
 assert_no_match "don't pause now, keep going"
 assert_no_match "no need to pause here"
 assert_no_match "should we pause here?"
 assert_no_match "do you think we should pause here and reassess?"
 assert_no_match "make the script pause here until the user confirms"
-assert_match    "going to pause here. write a follow-up. lead with open questions." "PAUSE"
-assert_match    "i think we better pause here and write a followup since the session is long" "PAUSE"
-assert_match    "subagent is huge. you didn't launch one per-file!!! pause for now. we'll continue later" "PAUSE"
-assert_match    "this is taking too long. let's pause for now and write a follow-up prompt" "PAUSE"
-assert_match    "after this we are pausing, prepare a followup prompt" "PAUSE"
 
 # Intent 15 — a conditional resume is a question; a full-clause precondition before "try again" still fires.
 assert_no_match "read foo.md and continue only if the plan makes sense, otherwise ask"
@@ -574,18 +558,12 @@ assert_match    "pr review 1234 -- the handler changed" "PR REVIEW"
 assert_match    "review pr 2" "PR REVIEW"
 assert_no_match "review pr 2 blockers first"
 
-# Intent 9 — Terraform context decides which "plan" it is; verbs before "plan"/"options" count.
+# Intent 9 — "plan … wait for my go" is silent in its Terraform sense.
 assert_no_match "run the plan and wait for my go"
 assert_no_match "terraform init, plan, and wait for my go"
 assert_no_match "cd infra, plan, wait for my go"
 assert_no_match "the plan looks good. apply and wait for my go"
 assert_no_match "show me the plan output and wait for my go"
-assert_match    "give me options and wait for my go" "PLANNING"
-assert_match    "present options and wait for my go" "PLANNING"
-assert_match    "research and plan, then wait for my go" "PLANNING"
-assert_match    "lets plan and wait for my go" "PLANNING"
-assert_match    "plan it out and wait for my go" "PLANNING"
-assert_match    "make a plan and wait for my go" "PLANNING"
 
 # Intent 6 — a report verb may sit a few words before "next steps"; an acknowledgement may lead "what else".
 assert_match    "what are the next steps?" "SESSION QUEUE"
@@ -616,20 +594,10 @@ assert_no_match "report status in the ticket"
 assert_no_match "deployed. it's running!"
 assert_no_match "make sure it is still running after the restart"
 
-# Intent 13 — contracted and modal leads, a "for/until/so" tail; the exclusion needs a pronoun after the modal.
-assert_match    "we're pausing here" "PAUSE"
-assert_match    "pausing here for today" "PAUSE"
-assert_match    "pausing here until tomorrow" "PAUSE"
-assert_match    "let's pause for now so i can review the diff" "PAUSE"
-assert_match    "we should pause here and write a followup" "PAUSE"
-assert_match    "i think we should pause here" "PAUSE"
-assert_match    "gotta pause here" "PAUSE"
+# Intent 13 — an adverb between the modal and the verb is still a question.
 assert_no_match "should we really pause here?"
 
-# Intent 5 — a bare 2+-digit number is a PR whatever follows; "merge this <noun>" and "into one" are local merges.
-assert_match    "can i merge 1234 yet?" "FINALIZE"
-assert_match    "should we merge 1234 or wait for the review?" "FINALIZE"
-assert_match    "can i merge 14 into main" "FINALIZE"
+# Intent 5 — local merges and counts stay silent.
 assert_no_match "can i merge 2 and 3 into one?"
 assert_no_match "i want to merge 3 and 4 into a single commit"
 assert_no_match "i want to merge this with the other function"
@@ -669,6 +637,37 @@ assert_no_match "i still see a redshift error"
 assert_no_match "do we have a bugbot comment on it?"
 assert_match    "do we have a bug in the mcp server?" "ROOT-CAUSE"
 
+# Intent 5 — the noun guard covers every stem the trigger admits, so the "final;ize" typo is a design discussion too.
+assert_no_match "final;ize the naming convention"
+assert_match    "check prs for comments before we final;ize the design doc" "COMMENT/THREAD SWEEP"
+assert_lacks    "check prs for comments before we final;ize the design doc" "FINALIZE"
+assert_match    "final;ize the pr" "FINALIZE"
+
+# ---------- 1.6.2: third review — families that never converged return to their pre-1.6 forms ----------
+
+# Intent 5 — mid-prompt merge asks are silent again; only whole-prompt merge phrasings and the finalize verb fire.
+assert_no_match "can i merge it into the other one?"
+assert_no_match "should we merge both helpers or keep them separate?"
+assert_no_match "i want to merge all the duplicate configs"
+assert_no_match "can i merge this pr into main?"
+assert_match    "merge it" "FINALIZE"
+
+# Intent 9 — plan-first holds are silent again in every sense; the planning verbs still fire.
+assert_no_match "run a plan and wait for my go"
+assert_no_match "give me options for restructuring the auth module and wait for my go"
+assert_match    "plan the migration" "PLANNING"
+
+# Intent 13 — a pause inside a longer prompt is silent again, including program behaviour.
+assert_no_match "the deploy should pause here for manual approval"
+assert_no_match "i don't think we should pause here"
+assert_match    "let's pause" "PAUSE"
+
+# Intent 4 — the trailing-clause review form yields to resolver/finalize, and a comments object is not a review.
+assert_lacks    "review pr 1234 and resolve the comments" "PR REVIEW"
+assert_lacks    "review pr 1234 and finalize if clean" "PR REVIEW"
+assert_no_match "review pr 1234 comments"
+assert_match    "review pr 1234 but ignore the tests" "PR REVIEW"
+
 rm -rf "$TMPHOME_A"
 
 # ---------- Phase B: config present — hard-mandate routing, null/false handling, injection safety ----------
@@ -692,6 +691,8 @@ assert_match    "resolve comments on pr" "Skill(skill='pr-resolver')"
 # extra_patterns is additive: a configured typo form routes exactly like the bundled spelling.
 assert_match    "run finalzie" "Skill(skill='pr-finalize')"
 assert_match    "finalzie the prs" "Skill(skill='pr-finalize')"
+# The noun guard takes configured stems too: a design discussion stays silent whichever spelling it uses.
+assert_no_match "finalzie the naming convention"
 # An unbalanced fragment is dropped, not spliced in — the bundled resolver pattern must still work and must not start matching everything.
 assert_match    "resolve the comments" "Skill(skill='pr-resolver')"
 assert_no_match "deploy the staging cluster"
