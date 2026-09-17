@@ -564,6 +564,111 @@ assert_match    "read docs/x.md and continue - i sent the message to apple" "IMP
 assert_match    "read docs/x.md and continue (notice we are not touching prod)" "IMPERATIVE / DEFECT-DECLARATIVE"
 assert_match    "the vpn is connected now. try again" "IMPERATIVE / DEFECT-DECLARATIVE"
 
+# ---------- 1.6.1: the second review — closed connector lists replaced by the boundary the README states ----------
+
+# Intent 4 — a bare 2+-digit number after the noun is a PR whatever follows; a 1-digit one only when it ends the clause.
+assert_match    "review pr 1234 - focus on the auth changes" "PR REVIEW"
+assert_match    "review pr 1234 but ignore the tests" "PR REVIEW"
+assert_match    "review pr 1234 thoroughly" "PR REVIEW"
+assert_match    "pr review 1234 -- the handler changed" "PR REVIEW"
+assert_match    "review pr 2" "PR REVIEW"
+assert_no_match "review pr 2 blockers first"
+
+# Intent 9 — Terraform context decides which "plan" it is; verbs before "plan"/"options" count.
+assert_no_match "run the plan and wait for my go"
+assert_no_match "terraform init, plan, and wait for my go"
+assert_no_match "cd infra, plan, wait for my go"
+assert_no_match "the plan looks good. apply and wait for my go"
+assert_no_match "show me the plan output and wait for my go"
+assert_match    "give me options and wait for my go" "PLANNING"
+assert_match    "present options and wait for my go" "PLANNING"
+assert_match    "research and plan, then wait for my go" "PLANNING"
+assert_match    "lets plan and wait for my go" "PLANNING"
+assert_match    "plan it out and wait for my go" "PLANNING"
+assert_match    "make a plan and wait for my go" "PLANNING"
+
+# Intent 6 — a report verb may sit a few words before "next steps"; an acknowledgement may lead "what else".
+assert_match    "what are the next steps?" "SESSION QUEUE"
+assert_match    "what are our next steps?" "SESSION QUEUE"
+assert_match    "tell me the next steps" "SESSION QUEUE"
+assert_match    "what's the next steps" "SESSION QUEUE"
+assert_match    "report on the plan and next steps" "SESSION QUEUE"
+assert_match    "ok, what else?" "SESSION QUEUE"
+assert_match    "done, what else?" "SESSION QUEUE"
+assert_no_match "write a summary with findings and next steps"
+assert_no_match "add a section with decisions and next steps"
+assert_no_match "we need auth, rate limiting, and what else?"
+
+# Intent 2 — an in-flight object may carry a determiner, a count, an adjective or a PR number; bare liveness questions fire.
+assert_match    "check the status of pr 1234" "STATUS PROBE"
+assert_match    "check status of prs 1234 and 1235" "STATUS PROBE"
+assert_match    "check the status of all the prs" "STATUS PROBE"
+assert_match    "check the status of the 3 prs" "STATUS PROBE"
+assert_match    "check status of the ci run" "STATUS PROBE"
+assert_match    "check the status of the background jobs" "STATUS PROBE"
+assert_match    "still running?" "STATUS PROBE"
+assert_match    "is it still running" "STATUS PROBE"
+assert_match    "is ci still running?" "STATUS PROBE"
+assert_match    "what's up with the sub-agnets? still alive? been 20m" "STATUS PROBE"
+assert_no_match "is the old cluster still alive?"
+assert_no_match "check status on the pods"
+assert_no_match "report status in the ticket"
+assert_no_match "deployed. it's running!"
+assert_no_match "make sure it is still running after the restart"
+
+# Intent 13 — contracted and modal leads, a "for/until/so" tail; the exclusion needs a pronoun after the modal.
+assert_match    "we're pausing here" "PAUSE"
+assert_match    "pausing here for today" "PAUSE"
+assert_match    "pausing here until tomorrow" "PAUSE"
+assert_match    "let's pause for now so i can review the diff" "PAUSE"
+assert_match    "we should pause here and write a followup" "PAUSE"
+assert_match    "i think we should pause here" "PAUSE"
+assert_match    "gotta pause here" "PAUSE"
+assert_no_match "should we really pause here?"
+
+# Intent 5 — a bare 2+-digit number is a PR whatever follows; "merge this <noun>" and "into one" are local merges.
+assert_match    "can i merge 1234 yet?" "FINALIZE"
+assert_match    "should we merge 1234 or wait for the review?" "FINALIZE"
+assert_match    "can i merge 14 into main" "FINALIZE"
+assert_no_match "can i merge 2 and 3 into one?"
+assert_no_match "i want to merge 3 and 4 into a single commit"
+assert_no_match "i want to merge this with the other function"
+assert_no_match "can i merge this file into the other one?"
+assert_no_match "merge 10 files into one"
+
+# Intent 3 — the sweep yields to a finalize that fires, not to the substring.
+assert_match    "check prs for comments before we finalize the design doc" "COMMENT/THREAD SWEEP"
+
+# Intent 15 — a condition binds only when it follows "continue" directly; "but only if" and "assuming" are conditions.
+assert_match    "read docs/handoff.md and continue. when done, write a followup" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_match    "read x.md and continue. if anything is unclear, ask" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_no_match "read x.md and continue but only if the plan makes sense"
+assert_no_match "read x.md and continue assuming ci is green"
+
+# Intent 10 — contracted and progressive challenge forms.
+assert_match    "i don't understand what you're doing" "ADVERSARIAL REVIEW"
+assert_match    "i don't understand what you are trying to do" "ADVERSARIAL REVIEW"
+
+# Intent 12 — a comma closes the "is stuck" clause.
+assert_match    "ci is stuck, check why" "ROOT-CAUSE"
+assert_match    "the subagent is stuck, kill it" "ROOT-CAUSE"
+
+# Intent 13 — a negator ahead of the lead ("don't need to pause") is still a negation.
+assert_no_match "don't need to pause here"
+assert_no_match "not going to pause now"
+assert_no_match "we're not gonna pause here, keep going"
+
+# Intent 6 — a declined queue ask stays silent; a negation elsewhere in the prompt does not suppress a real one.
+assert_no_match "don't give me next steps"
+assert_no_match "don't plan next steps, just do it"
+assert_match    "i don't undertand. followup? resume? what is left to do?" "SESSION QUEUE"
+
+# Intent 12 — the mined fragments are word-bounded: "red xml", "redshift", "bugbot" are not incidents.
+assert_no_match "red xml is invalid"
+assert_no_match "i still see a redshift error"
+assert_no_match "do we have a bugbot comment on it?"
+assert_match    "do we have a bug in the mcp server?" "ROOT-CAUSE"
+
 rm -rf "$TMPHOME_A"
 
 # ---------- Phase B: config present — hard-mandate routing, null/false handling, injection safety ----------
