@@ -151,6 +151,49 @@ artifact. Because this intent is head-anchored, co-firing needs the document ver
 to lead — `draft an RFC, then let's plan the rollout` fires both, while `let's
 plan the migration and draft an RFC` fires planning alone.
 
+### Mined phrasings
+
+The patterns started from the phrasings their author guessed people would
+type. Comparing the hook against a semantic classifier over a month of real
+prompts, with the disagreements judged blind, showed the guess was too narrow:
+the hook fired on about a quarter of the prompts that carried an intent, while
+almost every fire it did make was right. The 1.6.0 patterns close the gap
+without giving up the precision, by admitting the shapes the real prompts
+actually take rather than by loosening the anchors:
+
+- **A PR number or object around the verb.** `1532 merged`, `merged both PRs`,
+  `merged the readme pr`, `merged 837 and 11456`, and a trailing clause after
+  it (`merged. we should learn from this`, `1611 merged. proceed`). A bare
+  `the <noun>` still only counts for a PR or branch, so `merged the two configs
+  into one` stays silent, and `merged?` stays a whole-prompt question.
+- **A PR reference after the review noun.** `pr review - <url> this part is
+  sensitive`, `review pr 123 and tell me if the readme is right`: once a PR
+  number or URL follows the noun the intent is fixed and anything may follow.
+- **An object that carries its own context.** `status of <x>`, `report status`,
+  `still alive?`; `anything else open from this session?`, `what are we waiting
+  on`, a trailing `next steps?` or `what else?`; `check prs for
+  comments/issues`; `<n> has comments to address`, `fix/address all findings`
+  (bare `fix` or `address` stay out); `ci is red`, `<x> is stuck?`; `can I
+  merge 14`, `I want to merge it` (but not `I want to merge these two
+  functions`); `fold into the existing pr`, `single pr for everything`;
+  `pausing here`, `pause and write a handoff`; `report when ci is done`,
+  `wait for ci to finish`.
+- **The handoff resume.** `read <file> and continue` is the single most common
+  prompt shape in the sample and carries the same posture as `continue`: the
+  next turn is a tool call, not a question. `try again` after a fixed
+  precondition (`vpn connected. try again`) is the same instruction.
+- **Challenges.** `I don't understand what you built`, `I miss your point`,
+  `why do we still have any tests?!` prime the adversarial posture alongside
+  the existing `wtf` / `are you sure` forms.
+
+Every new branch was checked against the full month of prompts before it
+landed; the ones that fired on anything the judges had not upheld were
+tightened or dropped. Plan-first asks are the one place a mined phrasing was
+deliberately narrowed: `wait for my go` fires the planning mandate only when a
+`present`, `plan`, `options` or `proposal` sits in the same prompt, because
+`describe what is left and wait for my go` wants a summary, not the planning
+pipeline.
+
 ## Contributing
 
 Validate the manifests and run the test suite locally before pushing:
