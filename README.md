@@ -173,14 +173,10 @@ actually take rather than by loosening the anchors:
   thoroughly`: a URL, a `#N`, or a bare number of two or more digits fixes the
   intent and anything may follow. A single digit is a count unless it ends the
   clause, so `review pr 2` fires and `pr review - 2 blockers, address them`
-  does not.
-- **Merge asks mid-prompt.** `can I merge 1234 yet?`, `should we merge 1234 or
-  wait?`, `I want to merge it`, `I want to merge this code`. The same number
-  rule applies, `merge this` takes only a PR-like object (`this pr`, `this
-  code`, `this branch`) or a clause break, and anything `into one` / `into a
-  single …` is a local merge: `I want to merge these two functions`, `merge 3
-  commits into one` and `can I merge this file into the other one?` stay
-  silent. A negation anywhere in the prompt suppresses the branch.
+  does not. The
+  trailing-clause form yields to a resolver or finalize ask in the same prompt
+  (`review pr 1234 and resolve the comments` routes to the resolver alone),
+  and `review pr 1234 comments` is a comment sweep, not a review.
 - **Status of in-flight work.** `status of <x>` at the head of a prompt; `report
   status`, `check pr status` when what follows is the end, a conjunction, or
   `of` an in-flight object — which may carry a determiner, a count, an
@@ -212,12 +208,6 @@ actually take rather than by loosening the anchors:
   the plan makes sense`, `… but only if`, `… assuming ci is green`). `try
   again` after a fixed precondition (`the vpn is connected now. try again`) is
   the same instruction.
-- **Pausing.** `pausing here`, `pause and write a handoff`, `let's pause for now
-  so i can review the diff`, `we're pausing here`, `we should pause here`,
-  `gotta pause here`. A negator before the verb or its lead (`don't pause now`,
-  `don't need to pause here`, `not going to pause`) and a question (`should we
-  pause here?`, `do you think we should pause here?`) stay silent, as does a
-  non-conversational object (`pause the cronjob until monday`).
 - **Challenges and incidents.** `I don't understand what you built and why`,
   `I don't understand what you're doing`, `I miss your point`, `why do we still
   have any tests?!` prime the adversarial posture; a request for an explanation
@@ -225,31 +215,26 @@ actually take rather than by loosening the anchors:
   a red check`, `zizmor is stuck?`, `ci is stuck, check why`, `do we have a bug
   in …` prime the root-cause posture; every fragment is word-bounded, so `red
   xml`, `redshift` and `bugbot` do not.
-- **Plan-first asks.** `present to me and wait for my go`, `give me options and
-  wait for my go`, `draft a plan and wait for my go`, `lets plan and wait for
-  my go`, `read, verify, check. plan. present. wait for go.`, `chart the path
-  forward`, `run it through planning`, `what is our plan to retire amd64`. The
-  plan noun must precede `wait for my go` within 80 characters and stand on its
-  own, and `plan` is also the Terraform verb: a Terraform marker anywhere in
-  the prompt (`terraform`, `init`, `apply`, `infra`, `the plan looks|output`,
-  `run the plan`) marks a hold-for-approval, so `run terraform plan and wait
-  for my go`, `cd infra, plan, wait for my go` and `the plan looks good. apply
-  and wait for my go` stay silent. `present the findings and wait for my go`
-  is a report, and `what's the plan for today?` a schedule question (only the
-  infinitive `plan to <verb>` counts).
 - **The rest.** `fold into the existing pr`, `fold if possible`, `single pr for
   everything`; `report when ci is done`, `wait for ci to finish`; `why is this
-  taking so long?`.
+  taking so long?`; plan-first asks that
+  never end in a planning noun: `chart the path forward`, `run it through
+  planning`, `read, verify, check. plan.`, `what is our plan to retire amd64`.
 
 Every new branch was checked against the full month of prompts before it
 landed; the ones that fired on anything the judges had not upheld were
-tightened or dropped. Two independent reviews then probed each trigger word in
-its other senses — as a noun (`status code`, `terraform plan`), negated
-(`don't pause now`), interrogative (`should we pause here?`), as a count
-(`merge 3 commits`) — and, the other way, each promised shape with the words
-people put after it (`review pr 1234 but …`, `pausing here for today`). Every
-probe is a regression case, and the corpus check confirms 1.6.1 fires on
-exactly the prompts 1.6.0 did.
+tightened or dropped. Three independent reviews then probed each trigger word
+in its other senses — as a noun (`status code`), negated (`don't pause now`),
+interrogative (`should we pause here?`), as a count (`merge 3 commits`), in its
+Terraform sense (`run the plan and wait for my go`) — and, the other way, each
+promised shape with the words people put after it. Three mined families never
+converged: every boundary that silenced their false fires also silenced real
+asks. 1.6.2 therefore returns them to their pre-1.6 whole-prompt forms rather
+than widening further: mid-prompt merge asks (`can I merge 1234 yet?`),
+plan-first holds (`present to me and wait for my go`), and pauses inside a
+longer prompt (`pausing here. write a follow-up`). Bare `merge it`, `ship it`,
+`let's pause` and the planning verbs still fire as before. Every probe from
+the reviews is a regression case.
 
 ## Contributing
 
