@@ -77,10 +77,12 @@ printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(dont|do not|don.t|never|no need to|
 CTX=""
 
 # Intent 1: merge report — user-driven, happens outside Claude's tool surface.
-MERGE_OBJ='(both|all|prs?|both prs|all prs|#?[0-9]{1,7}( and #?[0-9]{1,7})?|the ([a-z0-9-]+ )?(pr|prs|branch|changes?))'
+MERGE_OBJ='(both|all|prs?|both prs|all prs|#?[0-9]{1,7}( and #?[0-9]{1,7})?|the ([a-z0-9-]+ )?(pr|prs|branch)|the changes?)'
 # A trailing clause is allowed ("merged. we should learn from this") but a bare "the <noun>" only counts for a PR/branch, so "merged the css into one file" stays silent.
 MERGE_TAIL='( too)?([.,;!]( .*)?|\?| (but|and|so|now) .*)?'
-if printf '%s\n' "$NORM" | grep -qE "^((i )?merged( ${MERGE_OBJ})?|(#?[0-9]{1,7}|prs?|both|all|pr) merged)${MERGE_TAIL}\$"; then
+# "merged 2 and 3 into a single commit" is a local squash, not a PR report.
+if printf '%s\n' "$NORM" | grep -qE "^((i )?merged( ${MERGE_OBJ})?|(#?[0-9]{1,7}|prs?|both|all|pr) merged)${MERGE_TAIL}\$" \
+   && ! printf '%s\n' "$NORM" | grep -qE '^(i )?merged .{0,30}into (a |one|single|the same)'; then
   CTX="${CTX}INTENT — USER-INITIATED MERGE DETECTED. Required before any other response:
   1. Cite the PR number + ticket (parse the branch name for ${TICKET_ID_PATTERN} if not stated).
   2. Confirm the ticket status in ${TICKET_SYSTEM} → 'done'.
@@ -91,10 +93,11 @@ if printf '%s\n' "$NORM" | grep -qE "^((i )?merged( ${MERGE_OBJ})?|(#?[0-9]{1,7}
 fi
 
 # Intent 2: status probe — a promised proactive report never landed.
-STATUS_MORE='^status of [a-z0-9 _/-]{1,40}[?!.]*( .*)?$|(^|[^a-z])(report|check)( the| pr| ci| work| current)? status([ ?!.,]|$)|(^|[^a-z])(still (alive|running)|is it (still )?alive|(are|is) (they|it|the [a-z-]+) (still )?alive)[?!.]*( .*)?$|^why is (this|it) (taking so long|running longe?r)'
+STATUS_OBJ='( (each|all|both|every|the|these|those|our))?( (prs?|ci|work|runs?|jobs?|agents?|sub-?agents?|session|tasks?|everything))'
+STATUS_MORE='^status of [a-z0-9 _/-]{1,40}[?!.]*( .*)?$|(^|[^a-z])(report|check)( the)?( pr| prs| ci| work| current| overall)? status(es)?( of'"$STATUS_OBJ"')?([?!.,;:()]|$| \(| (and|now|please|first|before|didn|again|every|then|on|for|in)([^a-z]|$))|(^|[^a-z])((sub-?agents?|agents?|they|the (sub-?agents?|agents?|run|reviewers?|workers?|background (jobs?|tasks?)))( are| is)? (still (alive|running)|alive)|still alive)[?!.]*( .*)?$|(^|[^a-z])(is it|it.?s|it is) (still )?(alive|running)[?!]+( .*)?$|^why is (this|it) (taking so long|running longe?r)'
 # The second form is boundary-anchored: "status of <x>" and "report status" arrive with trailing clauses that the whole-prompt form rejects.
 if printf '%s\n' "$NORM" | grep -qE '^(status\??|any (status(es)?|updates?)\??|update( me)?\??|how is it going|where are we|where we at|what(.?s| is) the status)[.?!]?$' \
-   || printf '%s\n' "$NORM" | grep -qE "$STATUS_MORE"; then
+   || { [ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE "$STATUS_MORE"; }; then
   CTX="${CTX}INTENT — STATUS PROBE. User is checking on prior in-flight work. Before answering:
   1. Enumerate ALL pending state: background jobs, dispatched agents, CI runs being watched, in-flight skills.
   2. For each: fetch current state.
@@ -129,7 +132,8 @@ fi
 
 # Intent 3: comment sweep — raw API calls skip codified per-comment discipline. Yields to Intent 14: fixing the finding supersedes triaging it.
 if [ "$RESOLVER_MATCH" -eq 0 ] && { printf '%s\n' "$NORM" | grep -qE '^((any |new )?comments?\??|check (for |the )?comments?( on (the )?prs?)?|(review|address|resolve) (comments?|threads?|feedback)( on (the )?prs?)?|what(.?s| is) on the pr|pr feedback)[.?!]?$' \
-     || printf '%s\n' "$NORM" | grep -qE '^([0-9]+[.)] *)?((check|chek|ceck|sweep) (the |both |all |these |each )?prs? for (comments|issues|comments/issues|issues/comments|feedback|findings)|check comments? on the prs?)'; }; then
+     || { printf '%s\n' "$NORM" | grep -qE '^([0-9]+[.)] *)?((check|chek|ceck|sweep) (the |both |all |these |each )?prs? for (comments|comments/issues|issues/comments|issues and comments|comments and issues|feedback|findings)|check comments? on the prs?)' \
+          && ! printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(pr[ -]?)?(finaliz|finalis|final;iz)'; }; }; then
   if has_slot pr_check_skill; then
     PR_CHECK_SKILL=$(slot pr_check_skill "")
     CTX="${CTX}INTENT — COMMENT/THREAD SWEEP (skill routing). The user is asking for a survey of the review comments/threads on a PR. REQUIRED: your next tool call MUST be Skill(skill='${PR_CHECK_SKILL}'), passing the PR number as args if the user named one. That skill is the configured owner of this intent — sweeping the comments yourself via raw API calls is a skill-routing violation. Apply whatever comment-review discipline the skill defines rather than substituting an ad-hoc pass. Exception: if the user's ask is materially narrower than the skill scope (e.g., 'how many comments?'), surface the mismatch and act on the answer.
@@ -149,9 +153,9 @@ REVIEW_OBJ='(re-?)?review (the |this |that |my |our )?(prs?|pull requests?|diffs
 # Trailing punctuation repeats: the pre-1.2.0 "reviewers?\??" branch accepted two marks, so "reviewers??" must keep firing.
 REVIEW_TAIL='( ?#?[0-9]{1,7}| https?://[^ ]+)?( please| now| again)?'
 # A PR reference right after the noun fixes the intent, so anything may follow it: "pr review - <url> this part is sensitive".
-REVIEW_REF=' ?[-:]? ?(#?[0-9]{1,7}|https?://[^ ]+)'
+REVIEW_REF=' ?[-:]? ?(#[0-9]{1,7}([ .,:;!?].*)?|https?://[^ ]+([ .,:;!?].*)?|[0-9]{1,7}([.,:;!?].*)?|[0-9]{1,7} (and|then|please|now|too|also|first|next|again|carefully|properly|with|for|against|in|on|before|after|as)( .*)?)$'
 if [ "$NEGATION_MATCH" -eq 0 ] && { printf '%s\n' "$NORM" | grep -qE "^${REVIEW_LEAD}(${REVIEW_NOUN}|${REVIEW_ACT}|${REVIEW_OBJ}|reviewers?$(xp review))${REVIEW_TAIL}[.?!]*$" \
-     || printf '%s\n' "$NORM" | grep -qE "^${REVIEW_LEAD}(${REVIEW_NOUN}|${REVIEW_OBJ})${REVIEW_REF}([ .,:;!?].*)?\$"; }; then
+     || printf '%s\n' "$NORM" | grep -qE "^${REVIEW_LEAD}(${REVIEW_NOUN}|${REVIEW_OBJ})${REVIEW_REF}"; }; then
   if has_slot pr_review_skill; then
     PR_REVIEW_SKILL=$(slot pr_review_skill "")
     REVIEW_ROUTE="REQUIRED: your next tool call MUST be Skill(skill='${PR_REVIEW_SKILL}'), passing the PR number as args if named."
@@ -185,7 +189,7 @@ FINALIZE_MATCH=0
 # Merge phrasings stay whole-prompt anchored: "merge it" as a substring fires on "dont merge it yet".
 printf '%s\n' "$NORM" | grep -qE '^(is (the )?pr ready|ready to merge|merge ready|wrap up (the )?pr|pre-merge|all (set|done|good) for merge|merge it|merge th(is|ese)( one| pr)?|(please )?go ahead and merge|(lets|let.?s) merge( it| this)?|ship it|ok(ay)? merge( it)?|merge please|merge (it |this )?now)[.?!]?$' && FINALIZE_MATCH=1
 # "can I merge 14" / "I want to merge it" arrive mid-prompt; the object list keeps "I want to merge these two functions" silent.
-printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(can i|i want to|want to|shall we|should we) merge(( it| this| now| the prs?| both| all| #?[0-9]{1,7})([ .?!,]|$)|[.?!,]|$)' && FINALIZE_MATCH=1
+[ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(can i|i want to|want to|shall we|should we) merge(( it| this| now| the prs?| both| all| #[0-9]{1,7})([ .?!,(]|$)| [0-9]{1,7}([.?!,(]|$| \(| (and|then|now|we|i|please|so|if|when|once|after|before|too|also|already|asap|to|into|in|on|first|next|today|as is)([^a-z]|$))|[.?!,]|$)' && FINALIZE_MATCH=1
 # The finalize verb is matched as a substring: it is nearly always a trailing clause ("fix everything then finalize"), never the whole prompt.
 if printf '%s\n' "$NORM" | grep -qE "(^|[^a-z])(pr[ -]?)?(finaliz|finalis|final;iz$(xp finalize))[a-z]*" \
    && ! printf '%s\n' "$NORM" | grep -qE '(finalist|(finaliz|finalis)[a-z]*( [a-z]+){0,3} (naming|convention|approach|design|wording|schema|spec|rfc|doc|docs|document|version|draft|plan|copy|list|format|structure|architecture|decision|name|policy|template|title|message|notes|scheme))'; then
@@ -203,7 +207,7 @@ if [ "$FINALIZE_MATCH" -eq 1 ]; then
 fi
 
 # Intent 6: session queue / next item.
-QUEUE_MORE='(^|[^a-z])(anything|nothing|what|any follow.?up work)( else)?(( open| left| remaining| pending| to do| to address)( from| in| for)|( from| relating to| for)) this session|(^|[^a-z])in this session,? what( else|.?s next| is next)|(^|[^a-z])(what are we waiting (for|on)|we are waiting (for|on) what)([ ?!.,]|$)|(^|[^a-z])(next steps|what else|what(.?s| is) left to do|anything (else )?to do)[?!.]*$'
+QUEUE_MORE='(^|[^a-z])(anything|nothing|what|any follow.?up work)( else)?(( open| left| remaining| pending| to do| to address)( from| in| for)|( from| relating to| for)) this session|(^|[^a-z])in this session,? what( else|.?s next| is next)|(^|[^a-z])(what are we waiting (for|on)( here| now)?|we are waiting (for|on) what( now)?)([?!.]|$| and )|(^|[.,;!?] |(report|and|plan|then|so,?|give me|what are (the |our )?) )next steps[?!.]*$|(^|[.;!?] |(so,?|and) )what else[?!.]*$|(^|[^a-z])(what(.?s| is) left to do|anything (else )?to do)[?!.]*$'
 # Phrasings that carry their own object ("this session", "waiting on", a trailing "what else?") tolerate surrounding clauses; the bare forms stay whole-prompt anchored.
 if printf '%s\n' "$NORM" | grep -qE '^(so,? |ok,? )?(anything else( from this session)?\??|what(.?s| is) (left|next|still pending)|what(.?s| is) next( item)?|next( task| item| pr)?\??|what(.?s| is) remaining|are we done|done\??|is the session done)[.?!]?$' \
    || printf '%s\n' "$NORM" | grep -qE "$QUEUE_MORE"; then
@@ -233,7 +237,8 @@ fi
 PLANNING_VERB_MATCH=0
 [ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(plan (this|that|it)|plan the .+|let.?s plan|need to plan|draft (a |the )?plan|prepare (a |the )?plan|present (the )?plan|planning)[.?!]?$' && PLANNING_VERB_MATCH=1
 # "present, then wait for my go" and "verify, check, plan" are plan-first asks that never end in a planning noun.
-[ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])((present|plan|options|path forward|proposal).{0,80}wait for (my |your )?"?go"?([.!,]|$)|chart the path forward|what(.?s| is) (our|the) plan (to|for) |run (it|this) through planning|(verify|check),? (check|verify)[.,]? plan([.,!]|$))' && PLANNING_VERB_MATCH=1
+PLAN_NOUN='(present (to me|the (plan|work|options|approach|proposal|path forward))|(^|[.,;:] |(the|a|an|our|your|my|some|with|draft|prepare|propose|outline|write|share) )(plans?|options|proposal|path forward)([^a-z]|$))'
+[ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE "${PLAN_NOUN}"'.{0,80}wait for (my |your )?"?go"?([.!,]|$)|(^|[^a-z])(chart the path forward|what(.?s| is) (our|the) plan to [a-z]|run (it|this) through planning|(verify|check),? (check|verify)[.,]? plan([.,!]|$))' && PLANNING_VERB_MATCH=1
 RIGOR_AMPLIFIER_MATCH=0
 [ "$NEGATION_MATCH" -eq 0 ] && printf '%s\n' "$NORM" | grep -qE '(evidence[- ]based|1000.{0,5}(% )?sure|100% sure|bulletproof|mock and test|verify (everything|the plan|all)|fully verify|before (we|i) (run|execute|merge|apply|destroy|remove))' && RIGOR_AMPLIFIER_MATCH=1
 if [ "$PLANNING_VERB_MATCH" -eq 1 ] || [ "$RIGOR_AMPLIFIER_MATCH" -eq 1 ]; then
@@ -249,7 +254,7 @@ if [ "$PLANNING_VERB_MATCH" -eq 1 ] || [ "$RIGOR_AMPLIFIER_MATCH" -eq 1 ]; then
 fi
 
 # Intent 10: adversarial review priming — user framing IS a finding-equivalent.
-if printf '%s\n' "$NORM" | grep -qE '(wtf|rose.{0,5}tinted|pink.{0,5}tinted|verify if (this|that|it.?s|the).{0,5}(needed|correct|valid|right|wrong|necessary)|is the author|what is the author|messing with|this (is|looks) (wrong|garbage|broken|bad)|are you (stupid|sure)|take off (your |the )(rose|pink)|i don.?t understand[.,]? (what|why|you|how)|i miss your point|something weird|why do we (still|even) (have|need))'; then
+if printf '%s\n' "$NORM" | grep -qE '(wtf|rose.{0,5}tinted|pink.{0,5}tinted|verify if (this|that|it.?s|the).{0,5}(needed|correct|valid|right|wrong|necessary)|is the author|what is the author|messing with|this (is|looks) (wrong|garbage|broken|bad)|are you (stupid|sure)|take off (your |the )(rose|pink)|i don.?t understand[.,]? (why|you |what (you|we|it|this|that) (did|built|changed|made|added|removed|wrote|are doing|is doing|does|did there))|i miss your point|something weird|why do we (still|even) (have|need))'; then
   RIGOR_DOC=$(slot rigor_doc_path "")
   RIGOR_NOTE=""
   if [ -n "$RIGOR_DOC" ]; then RIGOR_NOTE=" Per ${RIGOR_DOC}."; fi
@@ -272,14 +277,15 @@ fi
 # Intent 12: root-cause / debugging / incident — advisory only, never invokes the agent itself.
 if printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(why (did|is|are|does|would|wont|won.?t).{0,40}(fail|failing|break|broke|broken|crash|error|down|timeout|timing out|not work|stuck)|root.?cause|rca([^a-z]|$)|whats? (causing|caused)|what is causing|figure out why|find out why|debug (this|the|why)|diagnose)' \
    || printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(the |my |our )?(job|pod|build|deploy|deployment|pipeline|workflow|run|apply|migration|service|container|test) (failed|is failing|keeps failing|crashed|keeps crashing|is broken|broke|timed out|wont start|won.?t start|is stuck)' \
-   || printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(ci is red|red (check|ci|x)|still (see|seeing) (a |the )?red|[a-z0-9-]+ is stuck([^a-z]|$)|why (was|is) (the |this |it |[a-z-]+ )?(job|build|run|pipeline|it|this)? ?stuck|(check|analy[sz]e|figure out|find out)( and (analy[sz]e|check))? why (this|it|that) (failed|fails|is failing|broke)|do we have a bug)'; then
+   || printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(ci is red|red (check|ci|x)|still (see|seeing) (a |the )?red|[a-z0-9-]+ is stuck([?!.]|$)|why (was|is) (the |this |it |[a-z-]+ )?(job|build|run|pipeline|it|this)? ?stuck|(check|analy[sz]e|figure out|find out)( and (analy[sz]e|check))? why (this|it|that) (failed|fails|is failing|broke)|do we have a bug)'; then
   CTX="${CTX}INTENT — ROOT-CAUSE / DEBUGGING / INCIDENT. Before presenting an answer, EVALUATE routing it through the read-only skeptic auditor bundled with this plugin: Agent(subagent_type='intent-router:skeptic'). Use it when the answer names a root cause, the failure is non-trivial, or you'd otherwise be presenting a first-fit hypothesis. To submit, assemble the briefing it requires — ORIGINAL USER ASK (verbatim) / TASK TYPE / CLAIMS each with file:line|command+output|url|none / ASSUMPTIONS / WHAT WAS NOT CHECKED — then spawn it and act on the verdict (ACCEPT / NEEDS-MORE-WORK / REJECT). A wrapper-level cause ('pod never Ready', 'CI exited 1', 'test failed') is a SYMPTOM, not a root cause — keep digging (logs, metrics, init containers, app stdout, sibling successful runs) until the underlying fault is named. Skip the skeptic only for trivial/obvious causes — and say so if you skip.
 "
 fi
 
 # Intent 13: pause — literal trigger word, high precision by design.
 if printf '%s\n' "$NORM" | grep -qE '^(please )?(lets |let.s )?pause( here| now| for now| everything| work| session| please)?[.,!? ]*$' \
-   || printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(gracefully pause|paus(e|ing) (here|for today|now|for now)|pause and (write|prepare) (a |the )?handoff|(write|prepare) (a |the )?handoff( now)?,? and (then )?pause|we are pausing( here| for now| for today| now)?([.,!]| with| and|$)|i want to pause( for today| here| now)?([.!]|$))'; then
+   || { printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(gracefully pause|pause and (write|prepare) (a |the )?handoff|(write|prepare) (a |the )?handoff( now)?,? and (then )?pause|we are pausing( here| for now| for today| now)?([.,!]| with| and|$)|i want to pause( for today| here| now)?([.!]|$))|(^|[.,;!?] |(and|then|lets|let.?s|please|now|ok|okay|going to|gonna|need to|have to|better|we are|i am|i.?m) )paus(e|ing) (here|for today|now|for now)([.,!?]|$| and| with)' \
+        && ! printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(dont|do not|don.?t|never|no need to|not|shouldn.?t|can.?t|cannot|should|shall|could|can|would|do you think|do we|why not) (we |i |you |just |maybe |also |yet |now |even )*paus(e|ing)'; }; then
   CTX="${CTX}INTENT — PAUSE (graceful stop + resume packet). Required now, before anything else:
   1. Finish only the current atomic step safely — no new multi-step or destructive actions this turn.
   2. Emit the full handoff packet (ticket/task, decisions made, live-state snapshots, next steps, file paths) as the LAST message content.
@@ -294,8 +300,9 @@ if [ "$NEGATION_MATCH" -eq 0 ] && { \
   || printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(stop asking|quit asking|is wrong because|thats wrong because)' \
   || printf '%s\n' "$NORM" | grep -qE '(^|[^a-z])(thats|that.s|its|it.s|this is) not (useful|general enough|right|correct|helpful|what i (asked|meant|wanted))' \
   || printf '%s\n' "$NORM" | grep -qE 'not useful[.!]*$' \
-  || printf '%s\n' "$NORM" | grep -qE '^read [^ ]+ and (continue|proceed)( with [a-z0-9 ._-]{1,40})?[.!]*( .*)?$' \
-  || printf '%s\n' "$NORM" | grep -qE '^([a-z ]{0,20}[.,] )?try again[.!]*$'; }; then
+  || { printf '%s\n' "$NORM" | grep -qE '^read [^ ]+ and (continue|proceed)( with [a-z0-9 ._-]{1,40})?[.!]*( .*)?$' \
+       && ! printf '%s\n' "$NORM" | grep -qE '^read [^ ]+ and (continue|proceed)( with [a-z0-9 ._-]{1,40})?[.!,]* (only |but )?(if|unless|when|once|after|until|as long as|provided|as soon as)([^a-z]|$)'; } \
+  || printf '%s\n' "$NORM" | grep -qE '^([^.!?;]{0,80}[.,;!?] )?try again[.!]*$'; }; then
   CTX="${CTX}INTENT — IMPERATIVE / DEFECT-DECLARATIVE. The user is instructing, not asking. Both an imperative ('do it', 'proceed', 'stop asking') and a declarative naming a defect ('X is wrong because Y', 'that's not useful') are instructions. Required posture this turn:
   1. Your next turn is a TOOL CALL, not a clarifying question and not an analysis of whether they are right. The premise was settled in a prior turn — re-arguing it spends a turn re-litigating what was already decided.
   2. Do NOT undo a change you made at their direction while 'looking into it'. Reverting their work is an action, not a neutral pause.

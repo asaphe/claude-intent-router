@@ -470,6 +470,100 @@ assert_match    "vpn connected. try again" "IMPERATIVE / DEFECT-DECLARATIVE"
 assert_no_match "read docs/handoff.md and tell me what you think"
 assert_no_match "don't try again until i say so"
 
+# ---------- 1.6.0 review: the trigger words in their noun, negated, interrogative and count senses ----------
+
+# Intent 1 — a local squash and an adjective-qualified "changes" are not PR reports.
+assert_no_match "merged 2 and 3 into a single commit"
+assert_no_match "merged the upstream changes. now rebuild"
+assert_match    "merged 1669 and 877. regarding the changes in 1670, this won't force kms, right?" "USER-INITIATED MERGE"
+
+# Intent 2 — "status" as a noun, an ops object, a negation, and a non-agent subject stay silent.
+assert_no_match "check the status code returned by the api"
+assert_no_match "add a health check status endpoint"
+assert_no_match "update the report status column in the schema"
+assert_no_match "check the status of the pods and restart any crashlooping ones"
+assert_no_match "don't check status, just push"
+assert_no_match "is the old cluster still running?"
+assert_no_match "keep the old job still running until we cut over"
+assert_no_match "there's also a subagent running"
+assert_no_match "why is the pod still running after the delete?"
+assert_match    "check the status of each pr. if any has comments fix them" "STATUS PROBE"
+assert_match    "report status of each pr (we have bypass). 1. has comments and needs fix" "STATUS PROBE"
+assert_match    "read docs/handoff.md and check the pr status. ensure no failing checks" "STATUS PROBE"
+assert_match    "report status every minute or so" "STATUS PROBE"
+assert_match    "subagents still running. any value there?" "STATUS PROBE"
+assert_match    "the sub-agent is alive?" "STATUS PROBE"
+
+# Intent 3 — a finalize verb in the same prompt owns the sweep; a bare "issues" is a diff-review ask.
+assert_lacks    "check prs for issues/comments and finalize" "COMMENT/THREAD SWEEP"
+assert_no_match "check the pr for issues in the terraform plan"
+assert_match    "check prs for comments/issues before we proceed" "COMMENT/THREAD SWEEP"
+
+# Intent 4 — a count after the noun is not a PR reference.
+assert_no_match "code review: 3 things i noticed in the handler, fix them"
+assert_no_match "pr review - 2 blockers, address them"
+
+# Intent 5 — a declined merge and a count-object merge stay silent; a parenthesised aside after the number still fires.
+assert_no_match "i don't want to merge it yet"
+assert_no_match "we don't want to merge this"
+assert_no_match "i want to merge 3 commits into one"
+assert_no_match "can i merge 2 configmaps into one?"
+assert_match    "can i merge 1565 (from code perspective and our work?)" "FINALIZE"
+assert_match    "any findings? i want to merge" "FINALIZE"
+
+# Intent 6 — "next steps" as a document noun, "what else" continuing a list, "waiting for" as an idiom.
+assert_no_match "update the readme with next steps"
+assert_no_match "add a section on next steps"
+assert_no_match "summarize the changes and list next steps"
+assert_no_match "don't worry about next steps"
+assert_no_match "we need auth, rate limiting, what else?"
+assert_no_match "what are we waiting for, deploy it"
+assert_match    "report status. plan next steps" "SESSION QUEUE"
+assert_match    "what are we waiting for here? anything waiting on me?" "SESSION QUEUE"
+assert_match    "and we are waiting for what?" "SESSION QUEUE"
+
+# Intent 8 + 5 — a documented co-fire: the watch is the promise, the finalize is what follows it.
+assert_match    "wait for ci to complete on all three and run pr-finalize" "PROACTIVE-REPORT"
+
+# Intent 9 — "terraform plan", "planned", a bare "present", and "plan for <time>" are not planning asks.
+assert_no_match "run terraform plan and wait for my go"
+assert_no_match "deployment is planned for friday. wait for my go"
+assert_no_match "present the findings and wait for my go"
+assert_no_match "what's the plan for today?"
+assert_no_match "what is the plan for the remaining prs?"
+assert_match    "present to me and wait for my go" "PLANNING"
+assert_match    "present the work we are going to do and wait for my go" "PLANNING"
+assert_match    "draft a plan and wait for my go" "PLANNING"
+
+# Intent 10 — a clarification request is not a challenge.
+assert_no_match "i don't understand what you mean by idempotent"
+assert_no_match "i don't understand how terraform workspaces work, explain"
+assert_match    "i don't understand. you didn't do the review?" "ADVERSARIAL REVIEW"
+assert_match    "i don't understand why 880 still has skip_app_deploy if we decided on using scope?" "ADVERSARIAL REVIEW"
+
+# Intent 12 — "is stuck" is a diagnosis ask only as a closed clause.
+assert_no_match "the reviewer is stuck on naming, pick one"
+assert_match    "1461 - zizmor is stuck? 1463 - has comments" "ROOT-CAUSE"
+
+# Intent 13 — negated, interrogative and non-conversational pauses stay silent; clause-led pauses fire.
+assert_no_match "don't pause now, keep going"
+assert_no_match "no need to pause here"
+assert_no_match "should we pause here?"
+assert_no_match "do you think we should pause here and reassess?"
+assert_no_match "make the script pause here until the user confirms"
+assert_match    "going to pause here. write a follow-up. lead with open questions." "PAUSE"
+assert_match    "i think we better pause here and write a followup since the session is long" "PAUSE"
+assert_match    "subagent is huge. you didn't launch one per-file!!! pause for now. we'll continue later" "PAUSE"
+assert_match    "this is taking too long. let's pause for now and write a follow-up prompt" "PAUSE"
+assert_match    "after this we are pausing, prepare a followup prompt" "PAUSE"
+
+# Intent 15 — a conditional resume is a question; a full-clause precondition before "try again" still fires.
+assert_no_match "read foo.md and continue only if the plan makes sense, otherwise ask"
+assert_no_match "read docs/x.md and continue if ci is green"
+assert_match    "read docs/x.md and continue - i sent the message to apple" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_match    "read docs/x.md and continue (notice we are not touching prod)" "IMPERATIVE / DEFECT-DECLARATIVE"
+assert_match    "the vpn is connected now. try again" "IMPERATIVE / DEFECT-DECLARATIVE"
+
 rm -rf "$TMPHOME_A"
 
 # ---------- Phase B: config present — hard-mandate routing, null/false handling, injection safety ----------
