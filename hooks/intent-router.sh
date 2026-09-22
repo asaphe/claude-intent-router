@@ -85,9 +85,9 @@ if printf '%s\n' "$NORM" | grep -qE "^((i )?merged( ${MERGE_OBJ})?|(#?[0-9]{1,7}
    && ! printf '%s\n' "$NORM" | grep -qE '^(i )?merged .{0,30}into (a |one|single|the same)'; then
   CTX="${CTX}INTENT — USER-INITIATED MERGE DETECTED. Required before any other response:
   1. Cite the PR number + ticket (parse the branch name for ${TICKET_ID_PATTERN} if not stated).
-  2. Confirm the ticket status in ${TICKET_SYSTEM} → 'done'.
+  2. Update the ticket in ${TICKET_SYSTEM}: set it to 'done' only when nothing else on it is still open; otherwise keep its status and record the merge on it.
   3. Surface unresolved follow-ups from this session (open PRs, deferred items, pending CI).
-  4. State the next item in the work queue, or ask explicitly if no queue exists.
+  4. Name the next item only from work this session touched or the handoff it started from; if none remains, say the session is done. Never offer another session's PR, branch or ticket item as the next task.
   Do not lead with a new question — lead with state confirmation.
 "
 fi
