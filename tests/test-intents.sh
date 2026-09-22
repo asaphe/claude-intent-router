@@ -77,6 +77,10 @@ assert_match    "merged!" "USER-INITIATED MERGE"
 assert_no_match "update the readme"
 assert_no_match "merged the css into one file"
 assert_no_match "merged all the css into one file"
+# The follow-up steps are scoped: a ticket with other open work stays open, and the next item never comes from another session.
+assert_match    "merged" "set it to 'done' only when nothing else on it is still open"
+assert_match    "merged" "Never offer another session's PR, branch or ticket item"
+assert_lacks    "merged" "State the next item in the work queue"
 
 # Intent 2 — status probe
 assert_match    "status" "STATUS PROBE"
