@@ -11,6 +11,13 @@ generic fallback text out of the box.
 /plugin install intent-router@claude-intent-router
 ```
 
+From a terminal or a setup script, no session needed:
+
+```sh
+claude plugin marketplace add asaphe/claude-intent-router
+claude plugin install intent-router@claude-intent-router --scope user
+```
+
 ## Usage
 
 Detects short-phrase intents — "status?", "merged", "check for comments",
