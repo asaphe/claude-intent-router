@@ -243,6 +243,19 @@ longer prompt (`pausing here. write a follow-up`). Bare `merge it`, `ship it`,
 `let's pause` and the planning verbs still fire as before. Every probe from
 the reviews is a regression case.
 
+### Performance
+
+The hook runs on every prompt, in parallel with every other `UserPromptSubmit`
+hook, under the harness timeout. Pattern tests use bash's `[[ =~ ]]` (the `m`
+helper) rather than a `printf | grep -qE` pipeline: each pipeline costs two
+process spawns, and on a loaded machine roughly fifty of them pushed the hook
+past the timeout, which discards its output. Both use the system POSIX ERE
+engine, so patterns carry over unchanged. Config keys are folded to lowercase
+in the single `jq` read for the same reason, so the slot lookups spawn nothing.
+Keep new intents on `m`, and keep `m` patterns in a variable or quoted
+argument — a regex written literally inside `[[ ]]` follows different quoting
+rules.
+
 ## Contributing
 
 Validate the manifests and run the test suite locally before pushing:
@@ -255,5 +268,5 @@ bash tests/test-intents.sh
 `marketplace.json` declares this repo as the only plugin it ships
 (`"source": "./"`), so that single validate command covers both manifests, and
 `--strict` fails on fields the runtime would otherwise tolerate. CI runs the
-same two checks, plus shellcheck and a second pass of the suite under BusyBox
-grep.
+same two checks, plus shellcheck and a second pass of the suite on macOS under
+the system bash 3.2, whose libc regex engine differs from Linux's.
