@@ -54,10 +54,14 @@ jobs:
       - name: Run test suite
         run: bash tests/test-intents.sh
 
-      # GNU grep and BSD grep disagree on an empty alternation branch: one matches everything, the other errors. Both are failure modes.
-      - name: Run test suite under BusyBox grep
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq && sudo apt-get install -y -qq busybox
-          mkdir -p /tmp/bbin && ln -sf "$(command -v busybox)" /tmp/bbin/grep
-          PATH="/tmp/bbin:$PATH" bash tests/test-intents.sh
+  # glibc and macOS libc regcomp disagree on edge cases such as an empty alternation branch; the hook matches with whichever the host has.
+  test_macos:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run test suite under macOS libc regex and system bash
+        run: /bin/bash tests/test-intents.sh
