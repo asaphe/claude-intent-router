@@ -6,7 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/intent-router.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/intent-router.sh",
+            "timeout": 30
           }
         ]
       }
