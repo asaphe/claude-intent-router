@@ -8,7 +8,8 @@ PROMPT=$(printf '%s\n' "$INPUT" | jq -r '.prompt // empty')
 [ -z "$PROMPT" ] && exit 0
 # 400, not 200: real workflow asks trail a clause onto other instructions ("wait for CI, resolve comments, finalize").
 [ "${#PROMPT}" -gt 400 ] && exit 0
-case "$PROMPT" in /*) exit 0 ;; esac
+# A task notification or an agent hand-back is harness text, not the user's words.
+case "${PROMPT#"${PROMPT%%[![:space:]]*}"}" in /*|'<task-notification>'*|'Another Claude session sent a message:'*) exit 0 ;; esac
 
 NORM=$(printf '%s' "$PROMPT" | tr '[:upper:]' '[:lower:]' | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//')
 
