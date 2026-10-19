@@ -872,6 +872,13 @@ assert_no_match 'write a "design doc" parser'
 
 rm -rf "$TMPHOME_F"
 
+echo "=== Phase G: harness-generated prompts are skipped ==="
+
+assert_match "root cause the ci failure" "ROOT-CAUSE"
+assert_no_match '<task-notification><summary>Agent "root cause the ci failure" finished</summary></task-notification>'
+assert_no_match '  <task-notification><summary>PR ready to finalize, resolve comments</summary></task-notification>'
+assert_no_match 'Another Claude session sent a message: root cause the ci failure and finalize'
+
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
 [ "$FAIL" -eq 0 ]
